@@ -2,19 +2,22 @@
 
 A robust, theme-aware [Home Assistant](https://www.home-assistant.io/) Lovelace
 card for **Bambu Lab AMS** units — built to fix the things the stock
-[ha-bambulab](https://github.com/greghesp/ha-bambulab) AMS card gets awkward:
+[ha-bambulab](https://github.com/greghesp/ha-bambulab) AMS card gets awkward.
 
-- ✅ **Every model rendered correctly** — AMS, AMS Lite, AMS 2 Pro, **AMS HT**
-  and the external spool. The graphic is drawn with scalable CSS, so the tall
-  single-spool **HT no longer blows the card up** to a giant portrait image.
-- ✅ **Multiple AMS units in one card** — auto-discovered from the printer.
-- ✅ **Auto-follow** — the unit and slot that's *actively printing* is
-  highlighted automatically. No `input_select` hacks.
-- ✅ **Per-slot detail** — filament type, colour swatch, remaining %, active
-  highlight, tap → more-info.
-- ✅ **Humidity / temperature / drying chips** per unit.
-- ✅ **Theme-aware & sizable** — respects HA theme variables and a configurable
-  slot height; stack or row layouts.
+![Better AMS Card preview](https://raw.githubusercontent.com/petergCA/better-ams-card/main/images/preview.png)
+
+- 🎨 **Live spool re-colouring** — the real AMS artwork, with each spool tinted
+  to the **actual loaded filament colour** (keeps the strand texture, shifts the
+  hue). Empty/idle bays are dimmed so the in-use one pops.
+- 🧩 **Every model, correctly sized** — AMS, AMS Lite, AMS 2 Pro, **AMS HT** and
+  the external spool. The tall single-spool **HT no longer blows the card up**.
+- 🔄 **Single view + built-in selector** — shows one AMS at a time with an
+  **Auto / per-AMS** dropdown packaged right in the card (remembered per
+  browser). Auto follows whatever is printing. No `input_select` helper.
+- 🏷️ **Per-slot detail** — filament type on each bay, remaining %, tap → more-info.
+- 💧 **Humidity / temperature / drying chips**, plus **custom chips** for any
+  entity you like.
+- 🎚️ **Theme-aware & sizable** — respects HA theme variables, configurable height.
 
 > Works with the `ha-bambulab` integration. Buildless single file — no toolchain.
 
@@ -134,9 +137,9 @@ without you switching anything.
 
 ## Roadmap
 
-- Optional per-model background images (plug in your own artwork).
 - Visual config editor.
 - Spoolman / remaining-weight integration.
+- Per-model recolour calibration for AMS Lite / external spool.
 - Nozzle / drying state animations.
 
 ---
