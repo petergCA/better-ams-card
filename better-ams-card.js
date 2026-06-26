@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.5.1";
+const VERSION = "0.6.0";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -35,22 +35,25 @@ const MODELS = {
     slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090,
     emptyMask: true,   // base art has a coloured spool in every bay → desaturate empties
     labelY: 78, bayX: [16.2, 38.7, 61.0, 83.7],
+    // main strand window + flank masks either side of the orange feeder connectors
     windows: [
-      { x: 8.3, y: 7, w: 15.7, h: 51 },
-      { x: 30.8, y: 7, w: 15.7, h: 51 },
-      { x: 53.1, y: 7, w: 15.7, h: 51 },
-      { x: 75.9, y: 7, w: 15.7, h: 51 },
+      [{ x: 8.3, y: 7, w: 15.7, h: 51 }, { x: 8.3, y: 58, w: 4.9, h: 14 }, { x: 19.3, y: 58, w: 4.7, h: 14 }],
+      [{ x: 30.8, y: 7, w: 15.7, h: 51 }, { x: 30.8, y: 58, w: 5.2, h: 14 }, { x: 42.2, y: 58, w: 4.3, h: 14 }],
+      [{ x: 53.1, y: 7, w: 15.7, h: 51 }, { x: 53.1, y: 58, w: 5.2, h: 14 }, { x: 64.0, y: 58, w: 4.8, h: 14 }],
+      [{ x: 75.9, y: 7, w: 15.7, h: 51 }, { x: 75.9, y: 58, w: 4.8, h: 14 }, { x: 86.7, y: 58, w: 4.9, h: 14 }],
     ],
   },
   "ams": {
     slots: 4, label: "AMS", image: "ams.png", natW: 1698, natH: 1094,
     emptyMask: true,   // high-res art with coloured backing → desaturate empties
     labelY: 79, bayX: [14.6, 37.6, 60.7, 83.6],
+    // Each slot: main strand window + two flank masks that recolour the filament
+    // visible either side of the feeder gear cluster (centre left untinted).
     windows: [
-      { x: 6.6, y: 7, w: 16, h: 52 },
-      { x: 29.7, y: 7, w: 16, h: 52 },
-      { x: 52.8, y: 7, w: 16, h: 52 },
-      { x: 75.6, y: 7, w: 16, h: 52 },
+      [{ x: 9.5, y: 7, w: 16.5, h: 52 }, { x: 9.5, y: 59, w: 3.6, h: 13 }, { x: 19.8, y: 59, w: 6.2, h: 13 }],
+      [{ x: 29.7, y: 7, w: 16, h: 52 }, { x: 29.7, y: 59, w: 5.6, h: 13 }, { x: 42.2, y: 59, w: 3.5, h: 13 }],
+      [{ x: 52.8, y: 7, w: 16, h: 52 }, { x: 52.9, y: 59, w: 4.8, h: 13 }, { x: 64.5, y: 59, w: 4.3, h: 13 }],
+      [{ x: 75.6, y: 7, w: 16, h: 52 }, { x: 75.7, y: 59, w: 4.7, h: 13 }, { x: 86.9, y: 59, w: 4.7, h: 13 }],
     ],
   },
   "ams ht": {
@@ -339,26 +342,27 @@ class BetterAmsCard extends HTMLElement {
     const fcls = meta.feather ? " feather" : "";  // soften edges on low-contrast art
     const hasActive = u.slots.some((s) => s.active);
     const films = [], veils = [], labels = [];
-    meta.windows.forEach((w, i) => {
+    meta.windows.forEach((wdef, i) => {
       const s = u.slots[i];
       if (!s) return;
-      const style = `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`;
-      if (!s.empty) {
-        const c = s.color || "#888888";
-        films.push(`<div class="film${fcls}" style="${style}--c:${c};mix-blend-mode:${blend};"
-                     data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"></div>`);
-      } else if (meta.emptyMask) {
-        // Base art shows a coloured spool here — desaturate so it reads as empty.
-        films.push(`<div class="film empty${fcls}" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
-      }
-      // Veil: dim loaded non-active spools while printing; and (for emptyMask art)
-      // darken empty bays so they recede. Empty bays on other art are left alone.
-      let veil = false;
-      if (s.empty) veil = !!meta.emptyMask;
-      else veil = cfg.dim_inactive && !s.active && hasActive;
-      if (veil) veils.push(`<div class="veil" style="${style}"></div>`);
+      // A slot can carry one rect or several (e.g. to split around feeder gears).
+      const rects = Array.isArray(wdef) ? wdef : [wdef];
+      const veilOn = s.empty ? !!meta.emptyMask
+                             : (cfg.dim_inactive && !s.active && hasActive);
+      rects.forEach((w) => {
+        const style = `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`;
+        if (!s.empty) {
+          const c = s.color || "#888888";
+          films.push(`<div class="film${fcls}" style="${style}--c:${c};mix-blend-mode:${blend};"
+                       data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"></div>`);
+        } else if (meta.emptyMask) {
+          films.push(`<div class="film empty${fcls}" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
+        }
+        if (veilOn) veils.push(`<div class="veil" style="${style}"></div>`);
+      });
       if (overlayLabels) {
-        const cx = (meta.bayX && meta.bayX[i] != null) ? meta.bayX[i] : (w.x + w.w / 2);
+        const w0 = rects[0];
+        const cx = (meta.bayX && meta.bayX[i] != null) ? meta.bayX[i] : (w0.x + w0.w / 2);
         const accent = (!s.empty && s.color) ? s.color : "#FF9800";
         const dimL = s.empty || (!s.active && hasActive);
         labels.push(`<div class="bay ${s.active ? "active" : ""} ${dimL ? "dim" : ""}"
