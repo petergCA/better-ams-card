@@ -18,13 +18,10 @@
 
 const VERSION = "0.2.0";
 
-// Default location for the bundled artwork. Raw GitHub always resolves; override
-// with `image_base:` (e.g. a /local/ path) for fully offline installs.
+// Default location for the bundled artwork. Raw GitHub resolves on any install
+// with internet (HACS does not serve a plugin's extra files). Override with
+// `image_base:` (e.g. "/local/better-ams-card/images/") for offline/local use.
 let IMAGE_BASE = "https://raw.githubusercontent.com/petergCA/better-ams-card/main/images/";
-try {
-  // When served as an ES module alongside its images, prefer the local copy.
-  IMAGE_BASE = new URL("./images/", import.meta.url).href;
-} catch (e) { /* import.meta unavailable — keep raw default */ }
 
 /**
  * Per-model layout + image calibration.
