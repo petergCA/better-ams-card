@@ -35,32 +35,21 @@ const MODELS = {
     slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090,
     emptyMask: true,   // base art has a coloured spool in every bay → desaturate empties
     labelY: 78, bayX: [16.2, 38.7, 61.0, 83.7],
-    // One window per slot, covering ONLY the visible filament strand bundle behind
-    // the clear lid (measured: strands x bands ≈ 8.3/30.8/53.1/75.8%, w≈15.7%,
-    // y 7.8%→45.4%). Stops above the "Bambu Lab AMS 2 PRO" logo (~y52%) and the
-    // amber feeder gears (~y57%) so neither gets re-coloured.
-    windows: [
-      { x: 8.3,  y: 7.8, w: 15.7, h: 37.6 },
-      { x: 30.8, y: 7.8, w: 15.7, h: 37.6 },
-      { x: 53.1, y: 7.8, w: 15.7, h: 37.6 },
-      { x: 75.8, y: 7.8, w: 15.8, h: 37.6 },
-    ],
+    // Pixel-precise filament alpha mask (scripts/make_masks.py): re-colours each
+    // slot's whole column (strand + translucent body/feeder) while carving out the
+    // amber gears and the "Bambu Lab AMS 2 PRO" logo so they keep their real look.
+    // `bays` = per-slot clip ranges (bay divider centres) so each column takes its
+    // own colour and nothing bleeds into a neighbour/empty bay.
+    mask: "ams2pro_mask.png",
+    bays: [[0, 27.4], [27.4, 49.8], [49.8, 72.3], [72.3, 100]],
   },
   "ams": {
     slots: 4, label: "AMS", image: "ams.png", natW: 1698, natH: 1094,
     emptyMask: true,   // high-res art with coloured backing → desaturate empties
     labelY: 79, bayX: [16.5, 37.6, 60.7, 83.6],
-    // One window per slot over the visible strand bundle only (strands run a touch
-    // lower here, y 8%→50.8%; stops above the logo ~y54% and the amber gears).
-    // Slot 3 is split around the central silver sensor button: a full-width upper
-    // window above the button, then a narrower lower band to its right so the
-    // button stays silver (its right edge reaches x≈913 / 53.8%).
-    windows: [
-      { x: 8.0,  y: 8.0, w: 16.0, h: 42.8 },
-      { x: 29.7, y: 8.0, w: 15.8, h: 42.8 },
-      [{ x: 52.8, y: 8.0, w: 15.8, h: 36.7 }, { x: 53.7, y: 44.7, w: 14.8, h: 6.3 }],
-      { x: 75.4, y: 8.0, w: 16.1, h: 42.8 },
-    ],
+    // Filament alpha mask — also carves out the central silver sensor button.
+    mask: "ams_mask.png",
+    bays: [[0, 26.85], [26.85, 49.15], [49.15, 72.0], [72.0, 100]],
   },
   "ams ht": {
     slots: 1, label: "AMS HT", image: "official_amsht.png", natW: 171, natH: 360, labelY: 80,
@@ -321,7 +310,7 @@ class BetterAmsCard extends HTMLElement {
   _unitHtml(u) {
     const cfg = this._config;
     const chips = cfg.show_chips ? this._unitChips(u) : "";
-    const imageMode = u.meta.image && u.meta.windows && cfg.recolor !== "off";
+    const imageMode = u.meta.image && (u.meta.windows || u.meta.mask) && cfg.recolor !== "off";
     const overlayLabels = imageMode && cfg.show_labels && cfg.label_position !== "below";
     const body = imageMode ? this._graphicHtml(u, overlayLabels) : this._cssSpoolsHtml(u);
     const belowLabels = cfg.show_labels && !overlayLabels ? this._labelsHtml(u) : "";
@@ -350,27 +339,39 @@ class BetterAmsCard extends HTMLElement {
     const fcls = meta.feather ? " feather" : "";  // soften edges on low-contrast art
     const hasActive = u.slots.some((s) => s.active);
     const films = [], veils = [], labels = [];
-    meta.windows.forEach((wdef, i) => {
-      const s = u.slots[i];
-      if (!s) return;
-      // A slot can carry one rect or several (e.g. to split around feeder gears).
+
+    // Geometry of a slot's recolour layer(s): a precise alpha mask clipped to the
+    // bay (preferred), or a list of plain rectangles (legacy / HT).
+    const maskUrl = meta.mask ? IMAGE_BASE + meta.mask : null;
+    const slotPieces = (i) => {
+      if (maskUrl) {
+        const [l, r] = (meta.bays && meta.bays[i]) || [0, 100];
+        const m = `-webkit-mask-image:url(${maskUrl});mask-image:url(${maskUrl});`;
+        return [`left:0;top:0;width:100%;height:100%;clip-path:inset(0 ${(100 - r).toFixed(2)}% 0 ${l.toFixed(2)}%);${m}`];
+      }
+      const wdef = meta.windows[i];
       const rects = Array.isArray(wdef) ? wdef : [wdef];
+      return rects.map((w) => `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`);
+    };
+    const mcls = maskUrl ? " masked" : "";
+
+    u.slots.forEach((s, i) => {
+      if (!s || (!maskUrl && !meta.windows[i])) return;
       const veilOn = s.empty ? !!meta.emptyMask
                              : (cfg.dim_inactive && !s.active && hasActive);
-      rects.forEach((w) => {
-        const style = `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`;
+      slotPieces(i).forEach((style) => {
         if (!s.empty) {
           const c = s.color || "#888888";
-          films.push(`<div class="film${fcls}" style="${style}--c:${c};mix-blend-mode:${blend};"
+          films.push(`<div class="film${fcls}${mcls}" style="${style}--c:${c};mix-blend-mode:${blend};"
                        data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"></div>`);
         } else if (meta.emptyMask) {
-          films.push(`<div class="film empty${fcls}" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
+          films.push(`<div class="film empty${fcls}${mcls}" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
         }
-        if (veilOn) veils.push(`<div class="veil" style="${style}"></div>`);
+        if (veilOn) veils.push(`<div class="veil${mcls}" style="${style}"></div>`);
       });
       if (overlayLabels) {
-        const w0 = rects[0];
-        const cx = (meta.bayX && meta.bayX[i] != null) ? meta.bayX[i] : (w0.x + w0.w / 2);
+        const cx = (meta.bayX && meta.bayX[i] != null) ? meta.bayX[i]
+                 : (meta.windows ? (meta.windows[i][0] || meta.windows[i]).x : 50);
         const accent = (!s.empty && s.color) ? s.color : "#FF9800";
         const dimL = s.empty || (!s.active && hasActive);
         labels.push(`<div class="bay ${s.active ? "active" : ""} ${dimL ? "dim" : ""}"
@@ -548,6 +549,10 @@ class BetterAmsCard extends HTMLElement {
       .films { position:absolute; inset:0; }
       .film { position:absolute; border-radius:4px; cursor:pointer; background:var(--c, transparent); }
       .film.empty { background:#9a9a9a; mix-blend-mode:saturation; border-radius:4px; }
+      /* alpha-mask mode: a full-size layer clipped to the bay + masked to the filament shape */
+      .film.masked, .veil.masked { border-radius:0;
+        -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+        -webkit-mask-size:100% 100%; mask-size:100% 100%; }
       /* feather all four edges so the recolour blends into low-contrast artwork */
       .film.feather {
         -webkit-mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent),

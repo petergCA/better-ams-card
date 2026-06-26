@@ -27,30 +27,29 @@ def clip(r, g, b):
 def set_lum(c, L):
     d = L - lum(*c); return clip(c[0] + d, c[1] + d, c[2] + d)
 
-def recolor(img, box, color):
-    x0, y0, x1, y1 = box; px = img.load()
-    for y in range(y0, y1):
+# Recolour / desaturate gated by the filament alpha mask (mpx) and a bay x-clip.
+def recolor(img, mpx, x0, x1, color):
+    px = img.load()
+    for y in range(img.height):
         for x in range(x0, x1):
-            r, g, b, a = px[x, y]
-            if a < 8: continue
+            a = mpx[x, y] / 255
+            if a <= 0: continue
+            r, g, b, al = px[x, y]
             nr, ng, nb = set_lum(color, lum(r, g, b))
-            px[x, y] = (int(max(0, min(255, nr))), int(max(0, min(255, ng))), int(max(0, min(255, nb))), a)
-def desaturate(img, box, dark=0.0):
-    x0, y0, x1, y1 = box; px = img.load()
-    for y in range(y0, y1):
+            px[x, y] = (int(r * (1 - a) + nr * a), int(g * (1 - a) + ng * a), int(b * (1 - a) + nb * a), al)
+def desaturate(img, mpx, x0, x1, dark=0.0):
+    px = img.load()
+    for y in range(img.height):
         for x in range(x0, x1):
-            r, g, b, a = px[x, y]
-            if a < 8: continue
-            L = int(lum(r, g, b) * (1 - dark)); px[x, y] = (L, L, L, a)
+            a = mpx[x, y] / 255
+            if a <= 0: continue
+            r, g, b, al = px[x, y]
+            L = lum(r, g, b) * (1 - dark)
+            px[x, y] = (int(r * (1 - a) + L * a), int(g * (1 - a) + L * a), int(b * (1 - a) + L * a), al)
 
-# Calibrated filament windows (must match MODELS["ams 2 pro"].windows in the card):
-# one window per slot over the visible strand bundle only — nothing below the lid.
-WINS = [
-    [(8.3,  7.8, 15.7, 37.6)],
-    [(30.8, 7.8, 15.7, 37.6)],
-    [(53.1, 7.8, 15.7, 37.6)],
-    [(75.8, 7.8, 15.8, 37.6)],
-]
+# Bay clip ranges (must match MODELS["ams 2 pro"].bays in the card); the filament
+# alpha mask (images/ams2pro_mask.png, from scripts/make_masks.py) does the shaping.
+BAYS = [(0, 27.4), (27.4, 49.8), (49.8, 72.3), (72.3, 100)]
 BAYX = [16.2, 38.7, 61.0, 83.7]  # label centres on the spool/feeder bays
 LABEL_Y = 0.78
 SLOTS = [
@@ -63,23 +62,26 @@ SLOTS = [
 ams = Image.open("images/ams2pro.png").convert("RGBA")
 GW = 520; GH = int(GW * ams.height / ams.width)
 ams = ams.resize((GW, GH), Image.LANCZOS)
-def box(w):
-    x, y, ww, hh = w
-    return (int(x / 100 * GW), int(y / 100 * GH), int((x + ww) / 100 * GW), int((y + hh) / 100 * GH))
+mask = Image.open("images/ams2pro_mask.png").convert("L").resize((GW, GH), Image.LANCZOS)
+mpx = mask.load()
+def bayclip(b):
+    return int(b[0] / 100 * GW), int(b[1] / 100 * GW)
 
-for rects, s in zip(WINS, SLOTS):
-    for w in rects:
-        b = box(w)
-        if s["empty"]:
-            desaturate(ams, b, dark=0.35)
-        else:
-            recolor(ams, b, s["color"])
+for b, s in zip(BAYS, SLOTS):
+    x0, x1 = bayclip(b)
+    if s["empty"]:
+        desaturate(ams, mpx, x0, x1, dark=0.35)
+    else:
+        recolor(ams, mpx, x0, x1, s["color"])
 
-veil = Image.new("RGBA", ams.size, (0, 0, 0, 0)); vd = ImageDraw.Draw(veil)
-for rects, s in zip(WINS, SLOTS):
-    if not s["active"]:
-        for w in rects:
-            x0, y0, x1, y1 = box(w); vd.rounded_rectangle([x0, y0, x1, y1], radius=6, fill=(0, 0, 0, 120))
+veil = Image.new("RGBA", ams.size, (0, 0, 0, 0)); vpx = veil.load()
+for b, s in zip(BAYS, SLOTS):
+    if s["active"]: continue
+    x0, x1 = bayclip(b)
+    for y in range(GH):
+        for x in range(x0, x1):
+            a = mpx[x, y]
+            if a: vpx[x, y] = (0, 0, 0, int(120 * a / 255))
 ams = Image.alpha_composite(ams, veil)
 
 def bay_label(img, cx, cy, type_, pct, active, dim, accent):
