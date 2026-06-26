@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -36,10 +36,10 @@ const MODELS = {
     emptyMask: true,   // base art has a coloured spool in every bay → desaturate empties
     labelY: 78, bayX: [16.2, 38.7, 61.0, 83.7],
     windows: [
-      { x: 8.3, y: 7, w: 15.7, h: 44 },
-      { x: 30.8, y: 7, w: 15.7, h: 44 },
-      { x: 53.1, y: 7, w: 15.7, h: 44 },
-      { x: 75.9, y: 7, w: 15.7, h: 44 },
+      { x: 8.3, y: 7, w: 15.7, h: 51 },
+      { x: 30.8, y: 7, w: 15.7, h: 51 },
+      { x: 53.1, y: 7, w: 15.7, h: 51 },
+      { x: 75.9, y: 7, w: 15.7, h: 51 },
     ],
   },
   "ams": {
@@ -47,10 +47,10 @@ const MODELS = {
     emptyMask: true,   // high-res art with coloured backing → desaturate empties
     labelY: 79, bayX: [14.6, 37.6, 60.7, 83.6],
     windows: [
-      { x: 6.6, y: 7, w: 16, h: 44 },
-      { x: 29.7, y: 7, w: 16, h: 44 },
-      { x: 52.8, y: 7, w: 16, h: 44 },
-      { x: 75.6, y: 7, w: 16, h: 44 },
+      { x: 6.6, y: 7, w: 16, h: 52 },
+      { x: 29.7, y: 7, w: 16, h: 52 },
+      { x: 52.8, y: 7, w: 16, h: 52 },
+      { x: 75.6, y: 7, w: 16, h: 52 },
     ],
   },
   "ams ht": {
