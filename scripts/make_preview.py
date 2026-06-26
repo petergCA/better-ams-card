@@ -45,6 +45,8 @@ def desaturate(img, box, dark=0.0):
 
 # Calibrated filament windows (must match MODELS["ams 2 pro"].windows in the card)
 WINS = [(8.6, 7, 15.0, 37), (31.1, 7, 15.0, 37), (53.4, 7, 15.0, 37), (76.2, 7, 15.0, 37)]
+BAYX = [16, 38, 60.5, 82.7]  # label centres on the feeder bays
+LABEL_Y = 0.78
 SLOTS = [
     dict(type="PLA",  color=(225, 225, 225), pct=60, active=False, empty=False),
     dict(type="PETG", color=(46, 111, 176),  pct=80, active=False, empty=False),
@@ -90,8 +92,8 @@ def bay_label(img, cx, cy, type_, pct, active, dim):
     if len(lines) > 1:
         d.text((cx - w2 / 2, ty + 18), lines[1], font=f2, fill=(255, 255, 255, int(alpha * 0.85)))
 
-for w, s in zip(WINS, SLOTS):
-    x, y, ww, hh = w; cx = int((x + ww / 2) / 100 * GW); cy = int(0.84 * GH)
+for bx, s in zip(BAYX, SLOTS):
+    cx = int(bx / 100 * GW); cy = int(LABEL_Y * GH)
     bay_label(ams, cx, cy, s["type"], s["pct"], s["active"], dim=not s["active"])
 
 PAD = 18; UPAD = 12

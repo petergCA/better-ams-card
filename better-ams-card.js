@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.3.2";
+const VERSION = "0.3.3";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -32,7 +32,8 @@ let IMAGE_BASE = "https://raw.githubusercontent.com/petergCA/better-ams-card/mai
  */
 const MODELS = {
   "ams 2 pro": {
-    slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090, labelY: 84,
+    slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090,
+    labelY: 78, bayX: [16, 38, 60.5, 82.7],
     windows: [
       { x: 8.6, y: 7, w: 15.0, h: 37 },
       { x: 31.1, y: 7, w: 15.0, h: 37 },
@@ -337,7 +338,7 @@ class BetterAmsCard extends HTMLElement {
       const dim = cfg.dim_inactive && !s.active && (s.empty || hasActive);
       if (dim) veils.push(`<div class="veil" style="${style}"></div>`);
       if (overlayLabels) {
-        const cx = w.x + w.w / 2;
+        const cx = (meta.bayX && meta.bayX[i] != null) ? meta.bayX[i] : (w.x + w.w / 2);
         labels.push(`<div class="bay ${s.active ? "active" : ""} ${dim ? "dim" : ""}" style="left:${cx}%;top:${labelY}%;"
                        data-entity="${s.entity_id}">${this._bayInner(s)}</div>`);
       }
