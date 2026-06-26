@@ -398,7 +398,7 @@ class BetterAmsCard extends HTMLElement {
       .graphic { position:relative; height:var(--gfx-h,240px); aspect-ratio:var(--ar); margin:0 auto; isolation:isolate; }
       .graphic .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
       .films { position:absolute; inset:0; }
-      .film { position:absolute; border-radius:4px; cursor:pointer; }
+      .film { position:absolute; border-radius:4px; cursor:pointer; background:var(--c, transparent); }
       .film.empty { background:#9a9a9a; mix-blend-mode:saturation; border-radius:4px; }
       .film.empty::after { content:""; position:absolute; inset:0; background:rgba(0,0,0,0.28); border-radius:4px; }
       .film.active { outline:2px solid var(--primary-color); outline-offset:1px; box-shadow:0 0 10px var(--primary-color); border-radius:5px; }
