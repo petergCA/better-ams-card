@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.7.0";
+const VERSION = "0.7.1";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -46,7 +46,7 @@ const MODELS = {
   "ams": {
     slots: 4, label: "AMS", image: "ams.png", natW: 1698, natH: 1094,
     emptyMask: true,   // high-res art with coloured backing → desaturate empties
-    labelY: 79, bayX: [14.6, 37.6, 60.7, 83.6],
+    labelY: 79, bayX: [16.5, 37.6, 60.7, 83.6],
     // Each slot: main strand window + two flank masks that recolour the filament
     // visible either side of the feeder gear cluster (centre left untinted).
     windows: [
