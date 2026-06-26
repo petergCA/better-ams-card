@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.6.1";
+const VERSION = "0.7.0";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -438,15 +438,35 @@ class BetterAmsCard extends HTMLElement {
   }
 
   /** Custom user chip from a config entry: {entity, icon?, name?, tap_action?}. */
+  /**
+   * Custom chip config:
+   *   { entity, icon?, name?, map?, colors?, color?, round?, unit?, tap_action? }
+   *   map:     { <state>: "text" }    state -> display text
+   *   colors:  { <state>: "#rgb" }    state -> icon colour
+   *   round:   true                   round a numeric state
+   *   unit:    true | "%"             append unit (auto or literal)
+   *   tap_action: "more-info" (default) | "toggle"
+   */
   _customChip(c) {
     if (!c || !c.entity) return "";
     const st = this._hass.states[c.entity];
-    if (!st) return chip(c.icon || "mdi:help-circle", "—", c.entity);
-    const icon = c.icon || st.attributes.icon || "mdi:eye";
-    const unit = st.attributes.unit_of_measurement || "";
-    let val = `${this._hass.formatEntityState ? this._hass.formatEntityState(st) : (st.state + unit)}`;
-    const text = c.name ? `${c.name} ${val}` : val;
-    return chip(icon, text, c.entity);
+    const icon = c.icon || (st && st.attributes.icon) || "mdi:eye";
+    if (!st) return chip(icon, c.name ? `${c.name} —` : "—", c.entity, c.color, c.tap_action);
+
+    let value;
+    if (c.map && c.map[st.state] != null) {
+      value = c.map[st.state];
+    } else {
+      let v = st.state;
+      if (c.round) { const n = parseFloat(v); if (!isNaN(n)) v = String(Math.round(n)); }
+      const u = c.unit === true ? (st.attributes.unit_of_measurement || "")
+                                : (typeof c.unit === "string" ? c.unit : "");
+      value = u ? (u === "%" ? `${v}%` : `${v} ${u}`) : v;
+    }
+    const text = c.name ? `${c.name} ${value}` : value;
+    let color = c.color;
+    if (c.colors && c.colors[st.state] != null) color = c.colors[st.state];
+    return chip(icon, text, c.entity, color, c.tap_action);
   }
 
   _imageUrl(meta) {
@@ -466,8 +486,13 @@ class BetterAmsCard extends HTMLElement {
     this.shadowRoot.querySelectorAll("[data-entity]").forEach((el) => {
       el.addEventListener("click", () => {
         const id = el.getAttribute("data-entity");
-        if (id) this.dispatchEvent(new CustomEvent("hass-more-info",
-          { detail: { entityId: id }, bubbles: true, composed: true }));
+        if (!id) return;
+        if (el.getAttribute("data-tap") === "toggle") {
+          this._hass.callService("homeassistant", "toggle", { entity_id: id });
+        } else {
+          this.dispatchEvent(new CustomEvent("hass-more-info",
+            { detail: { entityId: id }, bubbles: true, composed: true }));
+        }
       });
     });
     const sel = this.shadowRoot.querySelector("select.sel");
@@ -579,10 +604,11 @@ class BetterAmsCard extends HTMLElement {
   _resolveSafe() { try { return this._resolveUnits(); } catch (e) { return []; } }
 }
 
-function chip(icon, text, entityId, color) {
+function chip(icon, text, entityId, color, tap) {
   if (text == null) return "";
   const ic = color ? ` style="color:${color}"` : "";
-  return `<div class="chip" data-entity="${entityId}"><ha-icon icon="${icon}"${ic}></ha-icon><span>${escapeHtml(text)}</span></div>`;
+  const td = tap ? ` data-tap="${tap}"` : "";
+  return `<div class="chip" data-entity="${entityId}"${td}><ha-icon icon="${icon}"${ic}></ha-icon><span>${escapeHtml(text)}</span></div>`;
 }
 
 /** Normalise Bambu colour attribute (#RRGGBB, #RRGGBBAA, or bare hex) to CSS. */

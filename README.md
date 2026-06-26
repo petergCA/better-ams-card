@@ -116,22 +116,34 @@ unit so you can pin a specific one. Your choice is remembered per browser — no
 
 ### Custom chips
 
-Add any entities you like to the card header:
+Add any entities you like to the card header (right side, next to the selector):
 
 ```yaml
-type: custom:better-ams-card
-printer: 588de0eb4f4634b2feb57a0703a0411a
-title: H2C
 chips:
-  - entity: sensor.h2c_print_progress
-    icon: mdi:progress-clock
-  - entity: sensor.h2c_nozzle_temperature
-    icon: mdi:printer-3d-nozzle-heat
-    name: Nozzle          # optional prefix; otherwise just the value is shown
-  - entity: binary_sensor.h2c_online
+  # simple value chip
+  - entity: sensor.chamber_temperature
+    icon: mdi:thermometer
+    round: true            # round a numeric state
+    unit: true             # append the entity's unit ("83 °F"); or unit: "%"
+
+  # status chip with per-state text + colour
+  - entity: binary_sensor.x1c_hms_errors
+    icon: mdi:alert-circle-outline
+    name: HMS              # optional static prefix
+    map: { on: Errors, off: OK }
+    colors: { on: "#E24B4A", off: "#1D9E75" }
+
+  # a toggle (e.g. an enclosure fan)
+  - entity: switch.air_filter
+    icon: mdi:air-filter
+    name: Bento
+    map: { on: "On", off: "Off" }
+    tap_action: toggle     # default is more-info
 ```
 
-Each chip shows its icon + value and opens more-info on tap.
+Per-chip options: `entity` (required), `icon`, `name`, `map` (state→text),
+`colors` (state→icon colour), `color` (static), `round`, `unit`
+(`true` or a literal like `"%"`), `tap_action` (`more-info` | `toggle`).
 
 ### Live spool re-colouring
 
