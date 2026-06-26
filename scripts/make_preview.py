@@ -44,8 +44,8 @@ def desaturate(img, box, dark=0.0):
             L = int(lum(r, g, b) * (1 - dark)); px[x, y] = (L, L, L, a)
 
 # Calibrated filament windows (must match MODELS["ams 2 pro"].windows in the card)
-WINS = [(8.6, 7, 15.0, 37), (31.1, 7, 15.0, 37), (53.4, 7, 15.0, 37), (76.2, 7, 15.0, 37)]
-BAYX = [16, 38, 60.5, 82.7]  # label centres on the feeder bays
+WINS = [(8.3, 7, 15.7, 44), (30.8, 7, 15.7, 44), (53.1, 7, 15.7, 44), (75.9, 7, 15.7, 44)]
+BAYX = [16.2, 38.7, 61.0, 83.7]  # label centres on the spool/feeder bays
 LABEL_Y = 0.78
 SLOTS = [
     dict(type="PLA",  color=(225, 225, 225), pct=60, active=False, empty=False),

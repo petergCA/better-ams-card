@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.3.3";
+const VERSION = "0.3.4";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -33,12 +33,12 @@ let IMAGE_BASE = "https://raw.githubusercontent.com/petergCA/better-ams-card/mai
 const MODELS = {
   "ams 2 pro": {
     slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090,
-    labelY: 78, bayX: [16, 38, 60.5, 82.7],
+    labelY: 78, bayX: [16.2, 38.7, 61.0, 83.7],
     windows: [
-      { x: 8.6, y: 7, w: 15.0, h: 37 },
-      { x: 31.1, y: 7, w: 15.0, h: 37 },
-      { x: 53.4, y: 7, w: 15.0, h: 37 },
-      { x: 76.2, y: 7, w: 15.0, h: 37 },
+      { x: 8.3, y: 7, w: 15.7, h: 44 },
+      { x: 30.8, y: 7, w: 15.7, h: 44 },
+      { x: 53.1, y: 7, w: 15.7, h: 44 },
+      { x: 75.9, y: 7, w: 15.7, h: 44 },
     ],
   },
   "ams": {
