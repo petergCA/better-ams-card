@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.4.1";
+const VERSION = "0.4.2";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -43,12 +43,13 @@ const MODELS = {
   },
   "ams": {
     slots: 4, label: "AMS", image: "official_ams.png", natW: 700, natH: 360,
+    blend: "multiply", feather: true,   // low-contrast art recolours better this way
     labelY: 74, bayX: [20.5, 39, 58.5, 77],
     windows: [
-      { x: 13.0, y: 9, w: 16, h: 33 },
-      { x: 31.0, y: 9, w: 16, h: 33 },
-      { x: 50.0, y: 9, w: 16, h: 33 },
-      { x: 68.5, y: 9, w: 16, h: 33 },
+      { x: 13.5, y: 11, w: 15, h: 27 },
+      { x: 31.5, y: 11, w: 15, h: 27 },
+      { x: 50.5, y: 11, w: 15, h: 27 },
+      { x: 69.0, y: 11, w: 15, h: 27 },
     ],
   },
   "ams ht": {
@@ -333,6 +334,8 @@ class BetterAmsCard extends HTMLElement {
     const ar = meta.natW / meta.natH;
     const labelY = cfg.label_y != null ? cfg.label_y : (meta.labelY != null ? meta.labelY : 84);
 
+    const blend = meta.blend || cfg.blend;        // some images recolour better with multiply
+    const fcls = meta.feather ? " feather" : "";  // soften edges on low-contrast art
     const hasActive = u.slots.some((s) => s.active);
     const films = [], veils = [], labels = [];
     meta.windows.forEach((w, i) => {
@@ -340,10 +343,10 @@ class BetterAmsCard extends HTMLElement {
       if (!s) return;
       const style = `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`;
       if (s.empty) {
-        films.push(`<div class="film empty" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
+        films.push(`<div class="film empty${fcls}" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
       } else {
         const c = s.color || "#888888";
-        films.push(`<div class="film" style="${style}--c:${c};mix-blend-mode:${cfg.blend};"
+        films.push(`<div class="film${fcls}" style="${style}--c:${c};mix-blend-mode:${blend};"
                      data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"></div>`);
       }
       // Dim everything that isn't the spool in use (and empties), but only while
@@ -503,6 +506,14 @@ class BetterAmsCard extends HTMLElement {
       .films { position:absolute; inset:0; }
       .film { position:absolute; border-radius:4px; cursor:pointer; background:var(--c, transparent); }
       .film.empty { background:#9a9a9a; mix-blend-mode:saturation; border-radius:4px; }
+      /* feather all four edges so the recolour blends into low-contrast artwork */
+      .film.feather {
+        -webkit-mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent),
+                            linear-gradient(to bottom, transparent, #000 13%, #000 87%, transparent);
+        -webkit-mask-composite: source-in; mask-composite: intersect;
+        mask-image: linear-gradient(to right, transparent, #000 14%, #000 86%, transparent),
+                    linear-gradient(to bottom, transparent, #000 13%, #000 87%, transparent);
+      }
       /* dim veil over non-active / empty spools so the in-use one pops */
       .veils { position:absolute; inset:0; pointer-events:none; }
       .veil { position:absolute; background:rgba(0,0,0,0.5); border-radius:4px; }
