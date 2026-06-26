@@ -120,8 +120,8 @@ def chip(x, txt):
 t2 = d.textlength("30°C", font=font(14, True)) + 34; t1 = d.textlength("21%", font=font(14, True)) + 34
 cx2 = CW - PAD - t2; cx1 = cx2 - 8 - t1
 chip(cx1, "21%"); chip(cx2, "30°C")
-d.ellipse([cx1 + 9, PAD + 15, cx1 + 19, PAD + 25], fill=(80, 170, 240))
-d.rounded_rectangle([cx2 + 11, PAD + 13, cx2 + 15, PAD + 27], radius=2, fill=(240, 140, 90))
+d.ellipse([cx1 + 9, PAD + 15, cx1 + 19, PAD + 25], fill=(54, 162, 224))
+d.rounded_rectangle([cx2 + 11, PAD + 13, cx2 + 15, PAD + 27], radius=2, fill=(229, 84, 75))
 uy0 = PAD + header_h
 d.rounded_rectangle([PAD, uy0, CW - PAD, CH - PAD], radius=14, fill=UNIT, outline=(70, 73, 81), width=1)
 d.text((PAD + UPAD, uy0 + 8), "H2C AMS 2", font=font(15, True), fill=TXT)

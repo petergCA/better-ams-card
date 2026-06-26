@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.3.5";
+const VERSION = "0.3.6";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -401,8 +401,8 @@ class BetterAmsCard extends HTMLElement {
       const st = hass.states[eid]; if (!st) return null;
       return `${st.state}${st.attributes.unit_of_measurement || ""}`;
     };
-    if (u.humidity && hass.states[u.humidity]) out.push(chip("mdi:water-percent", fmt(u.humidity), u.humidity));
-    if (u.temperature && hass.states[u.temperature]) out.push(chip("mdi:thermometer", fmt(u.temperature), u.temperature));
+    if (u.humidity && hass.states[u.humidity]) out.push(chip("mdi:water-percent", fmt(u.humidity), u.humidity, "#36A2E0"));
+    if (u.temperature && hass.states[u.temperature]) out.push(chip("mdi:thermometer", fmt(u.temperature), u.temperature, "#E5544B"));
     if (u.drying && hass.states[u.drying]) {
       const v = parseFloat(hass.states[u.drying].state);
       if (!isNaN(v) && v > 0) out.push(chip("mdi:hair-dryer", `${hass.states[u.drying].state}m`, u.drying));
@@ -544,9 +544,10 @@ class BetterAmsCard extends HTMLElement {
   _resolveSafe() { try { return this._resolveUnits(); } catch (e) { return []; } }
 }
 
-function chip(icon, text, entityId) {
+function chip(icon, text, entityId, color) {
   if (text == null) return "";
-  return `<div class="chip" data-entity="${entityId}"><ha-icon icon="${icon}"></ha-icon><span>${escapeHtml(text)}</span></div>`;
+  const ic = color ? ` style="color:${color}"` : "";
+  return `<div class="chip" data-entity="${entityId}"><ha-icon icon="${icon}"${ic}></ha-icon><span>${escapeHtml(text)}</span></div>`;
 }
 
 /** Normalise Bambu colour attribute (#RRGGBB, #RRGGBBAA, or bare hex) to CSS. */
