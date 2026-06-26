@@ -87,7 +87,8 @@ ams:
 |------------------|------------------|-----------|-------------|
 | `printer`        | string           | —         | Printer **device id** _or_ any **entity id** from the printer. Auto-discovers the AMS sub-devices. Either this or `ams` is required. |
 | `ams`            | list of strings  | —         | Explicit AMS **device ids or entity ids** (overrides discovery). |
-| `title`          | string           | —         | Optional card title. |
+| `title`          | string           | —         | Optional card title (top-left). |
+| `show_title`     | boolean          | `true`    | Set `false` to hide the title text while keeping `title` set. |
 | `view`           | `single` \| `all`| `single`  | `single` shows one unit with a built-in **Auto / per-AMS selector**; `all` shows every unit at once. |
 | `chips`          | list             | —         | Custom entity chips shown in the card header (see below). |
 | `auto_follow`    | boolean          | `true`    | In `single`/Auto, show whichever unit is printing. |

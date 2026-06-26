@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.6.0";
+const VERSION = "0.6.1";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -107,6 +107,7 @@ class BetterAmsCard extends HTMLElement {
     }
     this._config = {
       view: "single",        // single (one unit + selector) | all
+      show_title: true,      // show the card title text (top-left)
       auto_follow: true,
       highlight_unit: false, // draw the accent border around the active unit card
       dim_inactive: true,    // dim non-active / empty spools so the in-use one pops
@@ -288,11 +289,12 @@ class BetterAmsCard extends HTMLElement {
     const cfg = this._config;
     const customChips = (cfg.chips || []).map((c) => this._customChip(c)).join("");
     const selector = this._selectorHtml(units);
-    if (!cfg.title && !customChips && !selector) return "";
+    const showTitle = cfg.title && cfg.show_title !== false;
+    if (!showTitle && !customChips && !selector) return "";
     return `
       <div class="card-head">
         <div class="head-left">
-          ${cfg.title ? `<div class="card-title">${escapeHtml(cfg.title)}</div>` : ""}
+          ${showTitle ? `<div class="card-title">${escapeHtml(cfg.title)}</div>` : ""}
           ${selector}
         </div>
         <div class="chips">${customChips}</div>
