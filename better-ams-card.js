@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.4.2";
+const VERSION = "0.5.0";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -33,6 +33,7 @@ let IMAGE_BASE = "https://raw.githubusercontent.com/petergCA/better-ams-card/mai
 const MODELS = {
   "ams 2 pro": {
     slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090,
+    emptyMask: true,   // base art has a coloured spool in every bay → desaturate empties
     labelY: 78, bayX: [16.2, 38.7, 61.0, 83.7],
     windows: [
       { x: 8.3, y: 7, w: 15.7, h: 44 },
@@ -42,14 +43,14 @@ const MODELS = {
     ],
   },
   "ams": {
-    slots: 4, label: "AMS", image: "official_ams.png", natW: 700, natH: 360,
-    blend: "multiply", feather: true,   // low-contrast art recolours better this way
-    labelY: 74, bayX: [20.5, 39, 58.5, 77],
+    slots: 4, label: "AMS", image: "ams.png", natW: 1698, natH: 1094,
+    emptyMask: true,   // high-res art with coloured backing → desaturate empties
+    labelY: 79, bayX: [14.6, 37.6, 60.7, 83.6],
     windows: [
-      { x: 13.5, y: 11, w: 15, h: 27 },
-      { x: 31.5, y: 11, w: 15, h: 27 },
-      { x: 50.5, y: 11, w: 15, h: 27 },
-      { x: 69.0, y: 11, w: 15, h: 27 },
+      { x: 6.6, y: 7, w: 16, h: 44 },
+      { x: 29.7, y: 7, w: 16, h: 44 },
+      { x: 52.8, y: 7, w: 16, h: 44 },
+      { x: 75.6, y: 7, w: 16, h: 44 },
     ],
   },
   "ams ht": {
@@ -342,21 +343,25 @@ class BetterAmsCard extends HTMLElement {
       const s = u.slots[i];
       if (!s) return;
       const style = `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`;
-      if (s.empty) {
-        films.push(`<div class="film empty${fcls}" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
-      } else {
+      if (!s.empty) {
         const c = s.color || "#888888";
         films.push(`<div class="film${fcls}" style="${style}--c:${c};mix-blend-mode:${blend};"
                      data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"></div>`);
+      } else if (meta.emptyMask) {
+        // Base art shows a coloured spool here — desaturate so it reads as empty.
+        films.push(`<div class="film empty${fcls}" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
       }
-      // Dim everything that isn't the spool in use (and empties), but only while
-      // something is actually printing — otherwise show all loaded colours.
-      const dim = cfg.dim_inactive && !s.active && (s.empty || hasActive);
-      if (dim) veils.push(`<div class="veil" style="${style}"></div>`);
+      // Veil: dim loaded non-active spools while printing; and (for emptyMask art)
+      // darken empty bays so they recede. Empty bays on other art are left alone.
+      let veil = false;
+      if (s.empty) veil = !!meta.emptyMask;
+      else veil = cfg.dim_inactive && !s.active && hasActive;
+      if (veil) veils.push(`<div class="veil" style="${style}"></div>`);
       if (overlayLabels) {
         const cx = (meta.bayX && meta.bayX[i] != null) ? meta.bayX[i] : (w.x + w.w / 2);
         const accent = (!s.empty && s.color) ? s.color : "#FF9800";
-        labels.push(`<div class="bay ${s.active ? "active" : ""} ${dim ? "dim" : ""}"
+        const dimL = s.empty || (!s.active && hasActive);
+        labels.push(`<div class="bay ${s.active ? "active" : ""} ${dimL ? "dim" : ""}"
                        style="left:${cx}%;top:${labelY}%;--bay-accent:${accent};"
                        data-entity="${s.entity_id}">${this._bayInner(s)}</div>`);
       }
