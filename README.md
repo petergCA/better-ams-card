@@ -69,13 +69,45 @@ ams:
 | `printer`        | string           | —         | Printer **device id**. Auto-discovers AMS sub-devices and enables auto-follow. Either this or `ams` is required. |
 | `ams`            | list of strings  | —         | Explicit AMS **device ids** to render (overrides discovery). |
 | `title`          | string           | —         | Optional card title. |
+| `chips`          | list             | —         | Custom entity chips shown in the card header (see below). |
 | `auto_follow`    | boolean          | `true`    | Highlight the unit/slot currently being printed from. |
 | `unit_layout`    | `stack` \| `row` | `stack`   | Stack units vertically or lay them out in a row. |
-| `height`         | number (px)      | `150`     | Height of each spool graphic. |
+| `height`         | number (px)      | `240`     | Height of each unit's graphic. Width follows the image aspect, so every unit lines up — and the tall HT no longer dominates. |
+| `recolor`        | boolean          | `true`    | Re-colour each spool's filament in the artwork to the actual loaded colour. Set `false` to keep the stock artwork colours. |
+| `blend`          | string           | `color`   | Blend mode for re-colouring: `color` (recommended), `multiply`, `hue`, `overlay`. |
+| `images`         | map              | —         | Override the artwork per model, e.g. `{ "AMS 2 Pro": "/local/my-ams.png" }`. |
+| `image_base`     | string           | (GitHub)  | Base URL for the bundled artwork. Point at a `/local/...` path for fully offline installs. |
 | `show_chips`     | boolean          | `true`    | Show humidity / temperature / drying chips. |
-| `show_labels`    | boolean          | `true`    | Show the filament-type label under each slot. |
-| `show_remaining` | boolean          | `true`    | Show the remaining-filament bar under each slot. |
+| `show_labels`    | boolean          | `true`    | Show the filament-type label + remaining bar under each slot. |
+| `show_remaining` | boolean          | `true`    | Show the remaining-filament bar. |
 | `include_external` | boolean        | `false`   | Include the external spool when auto-discovering. |
+
+### Custom chips
+
+Add any entities you like to the card header:
+
+```yaml
+type: custom:better-ams-card
+printer: 588de0eb4f4634b2feb57a0703a0411a
+title: H2C
+chips:
+  - entity: sensor.h2c_print_progress
+    icon: mdi:progress-clock
+  - entity: sensor.h2c_nozzle_temperature
+    icon: mdi:printer-3d-nozzle-heat
+    name: Nozzle          # optional prefix; otherwise just the value is shown
+  - entity: binary_sensor.h2c_online
+```
+
+Each chip shows its icon + value and opens more-info on tap.
+
+### Live spool re-colouring
+
+The card renders the real AMS artwork, then tints each filament window to the
+**actual loaded colour** (from the tray sensor's `color` attribute) using a CSS
+blend — so the strand texture and lighting are kept while the colour matches
+what's really in the bay. Empty bays are desaturated. Turn it off with
+`recolor: false`, or tune the look with `blend:`.
 
 ---
 

@@ -2,27 +2,62 @@
  * better-ams-card
  * A robust, theme-aware Lovelace card for Bambu Lab AMS units.
  *
- * Renders every AMS model correctly (AMS, AMS Lite, AMS 2 Pro, AMS HT and the
- * external spool) with a scalable CSS layout — no fixed-aspect PNGs that blow
- * up the card. Supports multiple AMS units per printer, auto-highlights the
- * unit/slot that is actively printing, shows per-slot filament/colour/remaining
- * detail and humidity / temperature / drying chips, and respects Home Assistant
- * theme variables.
+ * - Renders every AMS model with the real product artwork, sized so nothing
+ *   (looking at you, AMS HT) blows the card up.
+ * - Re-colours each spool's filament in the image to the ACTUAL loaded colour
+ *   using a blend-mode overlay (keeps the strand texture, shifts the hue).
+ * - Multiple AMS units per printer, auto-discovered; auto-highlights whichever
+ *   unit/slot is actively printing.
+ * - Per-slot filament/colour/remaining detail, humidity/temp/drying chips, plus
+ *   fully custom user chips (any entity).
  *
  * Works with the ha-bambulab integration (greghesp).
  *
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
-/** Per-model layout metadata. Keyed by a normalised model string. */
+// Default location for the bundled artwork. Raw GitHub always resolves; override
+// with `image_base:` (e.g. a /local/ path) for fully offline installs.
+let IMAGE_BASE = "https://raw.githubusercontent.com/petergCA/better-ams-card/main/images/";
+try {
+  // When served as an ES module alongside its images, prefer the local copy.
+  IMAGE_BASE = new URL("./images/", import.meta.url).href;
+} catch (e) { /* import.meta unavailable — keep raw default */ }
+
+/**
+ * Per-model layout + image calibration.
+ * windows[] are the filament strand regions as % of the image box
+ * (x = left, y = top, w = width, h = height). A model with `image` + `windows`
+ * renders in image mode with live re-colouring; otherwise it falls back to a
+ * scalable CSS spool drawing (which already uses the real colour directly).
+ */
 const MODELS = {
-  "ams": { slots: 4, label: "AMS" },
-  "ams lite": { slots: 4, label: "AMS Lite" },
-  "ams 2 pro": { slots: 4, label: "AMS 2 Pro" },
-  "ams ht": { slots: 1, label: "AMS HT" },
-  "external spool": { slots: 1, label: "External" },
+  "ams 2 pro": {
+    slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090,
+    windows: [
+      { x: 7.3, y: 7, w: 14.5, h: 37 },
+      { x: 30.2, y: 7, w: 14.5, h: 37 },
+      { x: 52.8, y: 7, w: 14.5, h: 37 },
+      { x: 76.0, y: 7, w: 14.5, h: 37 },
+    ],
+  },
+  "ams": {
+    slots: 4, label: "AMS", image: "official_ams.png", natW: 700, natH: 360,
+    windows: [
+      { x: 14.0, y: 9, w: 15, h: 30 },
+      { x: 33.3, y: 9, w: 15, h: 30 },
+      { x: 52.7, y: 9, w: 15, h: 30 },
+      { x: 72.5, y: 9, w: 15, h: 30 },
+    ],
+  },
+  "ams ht": {
+    slots: 1, label: "AMS HT", image: "official_amsht.png", natW: 171, natH: 360,
+    windows: [{ x: 22, y: 14, w: 56, h: 24 }],
+  },
+  "ams lite": { slots: 4, label: "AMS Lite" },       // CSS fallback
+  "external spool": { slots: 1, label: "External" }, // CSS fallback
 };
 
 function normaliseModel(model) {
@@ -32,26 +67,20 @@ function normaliseModel(model) {
 function modelMeta(model) {
   const key = normaliseModel(model);
   if (MODELS[key]) return MODELS[key];
-  // Heuristics for variants we don't have an exact key for.
   if (key.includes("ht")) return MODELS["ams ht"];
   if (key.includes("external")) return MODELS["external spool"];
   if (key.includes("lite")) return MODELS["ams lite"];
+  if (key.includes("ams")) return MODELS["ams"];
   return { slots: 4, label: model || "AMS" };
 }
 
 class BetterAmsCard extends HTMLElement {
   static getStubConfig(hass) {
-    // Best-effort: pick the first bambu printer device we can find.
     let printer;
     try {
-      const devices = hass?.devices || {};
-      for (const id in devices) {
-        const m = normaliseModel(devices[id].model);
-        if (m && (m.startsWith("x1") || m.startsWith("p1") || m.startsWith("a1") ||
-                  m.startsWith("h2") || m.includes("carbon"))) {
-          printer = id;
-          break;
-        }
+      for (const id in (hass?.devices || {})) {
+        const m = normaliseModel(hass.devices[id].model);
+        if (/^(x1|p1|a1|h2)/.test(m) || m.includes("carbon")) { printer = id; break; }
       }
     } catch (e) { /* ignore */ }
     return { printer, auto_follow: true };
@@ -76,60 +105,49 @@ class BetterAmsCard extends HTMLElement {
       show_chips: true,
       show_labels: true,
       show_remaining: true,
-      unit_layout: "stack", // stack | row
-      height: 150,          // slot body height (px)
+      recolor: true,
+      blend: "color",        // color | multiply | hue | overlay
+      unit_layout: "stack",  // stack | row
+      height: 240,           // graphic height (px) — width follows the image aspect
       ...config,
     };
-    this._sig = null; // force re-render
+    if (this._config.image_base) IMAGE_BASE = this._config.image_base;
+    this._sig = null;
     if (this._hass) this._render();
   }
 
-  set hass(hass) {
-    this._hass = hass;
-    this._render();
-  }
+  set hass(hass) { this._hass = hass; this._render(); }
 
   // ---- data resolution ---------------------------------------------------
 
   _entitiesForDevice(deviceId) {
-    const hass = this._hass;
+    const reg = this._hass.entities || {};
     const out = [];
-    const reg = hass.entities || {};
-    for (const eid in reg) {
-      if (reg[eid].device_id === deviceId) out.push(eid);
-    }
+    for (const eid in reg) if (reg[eid].device_id === deviceId) out.push(eid);
     return out;
-  }
-
-  /** Resolve the ordered list of AMS device ids to render. */
-  _resolveUnits() {
-    const hass = this._hass;
-    const cfg = this._config;
-    let ids = [];
-
-    if (Array.isArray(cfg.ams) && cfg.ams.length) {
-      ids = cfg.ams.slice();
-    } else if (cfg.printer && hass.devices) {
-      // Auto-discover: AMS sub-devices hang off the printer via via_device_id.
-      for (const id in hass.devices) {
-        const d = hass.devices[id];
-        if (d.via_device_id !== cfg.printer) continue;
-        const m = normaliseModel(d.model);
-        if (m.includes("ams") || (cfg.include_external && m.includes("external"))) {
-          ids.push(id);
-        }
-      }
-      // Stable, human order by device name (AMS 1, AMS 2, AMS HT, ...).
-      ids.sort((a, b) => this._deviceName(a).localeCompare(
-        this._deviceName(b), undefined, { numeric: true }));
-    }
-
-    return ids.map((id) => this._buildUnit(id)).filter(Boolean);
   }
 
   _deviceName(deviceId) {
     const d = (this._hass.devices || {})[deviceId];
     return (d && (d.name_by_user || d.name)) || deviceId;
+  }
+
+  _resolveUnits() {
+    const hass = this._hass, cfg = this._config;
+    let ids = [];
+    if (Array.isArray(cfg.ams) && cfg.ams.length) {
+      ids = cfg.ams.slice();
+    } else if (cfg.printer && hass.devices) {
+      for (const id in hass.devices) {
+        const d = hass.devices[id];
+        if (d.via_device_id !== cfg.printer) continue;
+        const m = normaliseModel(d.model);
+        if (m.includes("ams") || (cfg.include_external && m.includes("external"))) ids.push(id);
+      }
+      ids.sort((a, b) => this._deviceName(a).localeCompare(
+        this._deviceName(b), undefined, { numeric: true }));
+    }
+    return ids.map((id) => this._buildUnit(id)).filter(Boolean);
   }
 
   _buildUnit(deviceId) {
@@ -147,21 +165,19 @@ class BetterAmsCard extends HTMLElement {
       else if (/_temperature$/.test(eid)) temperature = eid;
       else if (/remaining_drying_time$/.test(eid)) drying = eid;
     }
-    trays.sort((a, b) => {
-      const na = parseInt((a.match(/_tray_(\d+)$/) || [])[1] || "0", 10);
-      const nb = parseInt((b.match(/_tray_(\d+)$/) || [])[1] || "0", 10);
-      return na - nb;
-    });
+    trays.sort((a, b) =>
+      parseInt((a.match(/_tray_(\d+)$/) || [])[1] || "0", 10) -
+      parseInt((b.match(/_tray_(\d+)$/) || [])[1] || "0", 10));
 
     const slots = trays.map((eid) => {
       const st = hass.states[eid];
       const a = (st && st.attributes) || {};
-      const empty = !st || st.state === "Empty" || st.state === "unknown" || st.state === "unavailable";
+      const empty = !st || ["Empty", "unknown", "unavailable"].includes(st.state);
       return {
         entity_id: eid,
         empty,
-        color: a.color || null,
-        type: a.type || (empty ? "" : st.state),
+        color: normaliseColor(a.color),
+        type: a.type || (empty ? "" : (st ? st.state : "")),
         name: a.name || (st ? st.state : ""),
         remain: typeof a.remain === "number" ? a.remain : null,
         active: !!(a.active || a.in_use),
@@ -169,22 +185,18 @@ class BetterAmsCard extends HTMLElement {
     });
 
     return {
-      device_id: deviceId,
-      name: this._deviceName(deviceId),
-      model: dev.model,
-      meta,
-      slots,
-      humidity,
-      temperature,
-      drying,
-      active: slots.some((s) => s.active),
+      device_id: deviceId, name: this._deviceName(deviceId), model: dev.model, meta,
+      slots, humidity, temperature, drying, active: slots.some((s) => s.active),
     };
   }
 
   _signature(units) {
-    // Compact fingerprint of everything we render, to skip idle re-renders.
-    const hass = this._hass;
-    const parts = [this._config.title || ""];
+    const hass = this._hass, cfg = this._config;
+    const parts = [cfg.title || "", cfg.height, cfg.blend, cfg.recolor ? 1 : 0, cfg.unit_layout];
+    for (const c of (cfg.chips || [])) {
+      const st = hass.states[c.entity];
+      parts.push("chip", c.entity, st ? st.state : "");
+    }
     for (const u of units) {
       parts.push(u.device_id, u.name, u.model);
       for (const s of u.slots) parts.push(s.type, s.color, s.remain, s.active ? 1 : 0, s.empty ? 1 : 0);
@@ -201,92 +213,123 @@ class BetterAmsCard extends HTMLElement {
   _render() {
     if (!this._hass || !this._config) return;
     let units;
-    try {
-      units = this._resolveUnits();
-    } catch (e) {
-      this._renderError(String(e));
-      return;
-    }
+    try { units = this._resolveUnits(); }
+    catch (e) { this._renderError(String(e)); return; }
 
     const sig = this._signature(units);
     if (sig === this._sig) return;
     this._sig = sig;
 
     if (!units.length) {
-      this._renderError(
-        "No AMS units found. Check the 'printer' device id, or pass an explicit 'ams' list."
-      );
+      this._renderError("No AMS units found. Check the 'printer' device id, or pass an explicit 'ams' list.");
       return;
     }
 
     const cfg = this._config;
-    const rowLayout = cfg.unit_layout === "row";
+    const header = this._headerHtml();
     const unitsHtml = units.map((u) => this._unitHtml(u)).join("");
 
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
       <ha-card>
-        ${cfg.title ? `<div class="card-title">${escapeHtml(cfg.title)}</div>` : ""}
-        <div class="units ${rowLayout ? "row" : "stack"}">${unitsHtml}</div>
+        ${header}
+        <div class="units ${cfg.unit_layout === "row" ? "row" : "stack"}">${unitsHtml}</div>
       </ha-card>
     `;
     this._wireEvents();
   }
 
+  _headerHtml() {
+    const cfg = this._config;
+    const customChips = (cfg.chips || []).map((c) => this._customChip(c)).join("");
+    if (!cfg.title && !customChips) return "";
+    return `
+      <div class="card-head">
+        <div class="card-title">${cfg.title ? escapeHtml(cfg.title) : ""}</div>
+        <div class="chips">${customChips}</div>
+      </div>`;
+  }
+
   _unitHtml(u) {
     const cfg = this._config;
-    const chips = cfg.show_chips ? this._chipsHtml(u) : "";
-    const slots = u.slots.map((s, i) => this._slotHtml(s, i, u.meta)).join("");
+    const chips = cfg.show_chips ? this._unitChips(u) : "";
+    const imageMode = u.meta.image && u.meta.windows && cfg.recolor !== "off";
+    const body = imageMode ? this._graphicHtml(u) : this._cssSpoolsHtml(u);
+    const labels = cfg.show_labels ? this._labelsHtml(u) : "";
     const activeCls = cfg.auto_follow && u.active ? "active" : "";
     return `
-      <div class="unit ${activeCls}" style="--slot-h:${Number(cfg.height) || 150}px">
+      <div class="unit ${activeCls}" style="--slot-h:${Number(cfg.height) || 240}px;--gfx-h:${Number(cfg.height) || 240}px">
         <div class="unit-head">
           <div class="unit-name">${escapeHtml(u.name)}${
-            u.active && cfg.auto_follow ? `<span class="dot" title="Printing"></span>` : ""
-          }</div>
+            u.active && cfg.auto_follow ? `<span class="dot" title="Printing"></span>` : ""}</div>
           <div class="chips">${chips}</div>
         </div>
-        <div class="slots slots-${u.meta.slots}">${slots}</div>
-      </div>
-    `;
+        ${body}
+        ${labels}
+      </div>`;
   }
 
-  _slotHtml(s, i, meta) {
+  /** Image mode: real artwork + per-slot re-colour overlays. */
+  _graphicHtml(u) {
     const cfg = this._config;
-    const color = s.empty ? "var(--bac-empty)" : (s.color || "var(--bac-empty)");
-    const remain = cfg.show_remaining && s.remain != null
-      ? `<div class="remain"><span style="width:${clamp(s.remain, 0, 100)}%"></span></div>`
-      : "";
-    const label = cfg.show_labels
-      ? `<div class="label">${s.empty ? "Empty" : escapeHtml(s.type || "")}</div>`
-      : "";
+    const meta = u.meta;
+    const src = this._imageUrl(meta);
+    const ar = meta.natW / meta.natH;
+    const films = meta.windows.map((w, i) => {
+      const s = u.slots[i];
+      if (!s) return "";
+      const style = `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`;
+      if (s.empty) {
+        return `<div class="film empty" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`;
+      }
+      const c = s.color || "#888888";
+      return `<div class="film ${s.active ? "active" : ""}" style="${style}--c:${c};mix-blend-mode:${cfg.blend};"
+                   data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"></div>`;
+    }).join("");
     return `
-      <div class="slot ${s.active ? "active" : ""} ${s.empty ? "empty" : ""}"
-           data-entity="${s.entity_id}" title="${escapeHtml(s.name || "")}">
-        <div class="spool" style="--c:${color}">
-          <ha-icon icon="${s.empty ? "mdi:tray" : "mdi:printer-3d-nozzle"}"></ha-icon>
-        </div>
-        ${remain}
-        ${label}
-      </div>
-    `;
+      <div class="graphic" style="--ar:${ar};">
+        <img class="bg" src="${src}" alt="${escapeHtml(meta.label)}" />
+        <div class="films">${films}</div>
+      </div>`;
   }
 
-  _chipsHtml(u) {
+  /** CSS fallback for models without image calibration. */
+  _cssSpoolsHtml(u) {
+    const cfg = this._config;
+    const slots = u.slots.map((s) => {
+      const color = s.empty ? "var(--bac-empty)" : (s.color || "var(--bac-empty)");
+      return `
+        <div class="slot ${s.active ? "active" : ""} ${s.empty ? "empty" : ""}"
+             data-entity="${s.entity_id}" title="${escapeHtml(s.name)}">
+          <div class="spool" style="--c:${color}">
+            <ha-icon icon="${s.empty ? "mdi:tray" : "mdi:printer-3d-nozzle"}"></ha-icon>
+          </div>
+        </div>`;
+    }).join("");
+    return `<div class="slots slots-${u.meta.slots}">${slots}</div>`;
+  }
+
+  _labelsHtml(u) {
+    const cfg = this._config;
+    const cells = u.slots.map((s) => {
+      const t = s.empty ? "Empty" : (s.type || "");
+      const remain = cfg.show_remaining && s.remain != null
+        ? `<div class="remain"><span style="width:${clamp(s.remain, 0, 100)}%"></span></div>` : "";
+      return `<div class="lcell ${s.active ? "active" : ""}">
+                <div class="lname">${escapeHtml(t)}</div>${remain}</div>`;
+    }).join("");
+    return `<div class="labels labels-${u.slots.length}">${cells}</div>`;
+  }
+
+  _unitChips(u) {
     const hass = this._hass;
     const out = [];
     const fmt = (eid) => {
-      const st = hass.states[eid];
-      if (!st) return null;
-      const unit = st.attributes.unit_of_measurement || "";
-      return `${st.state}${unit}`;
+      const st = hass.states[eid]; if (!st) return null;
+      return `${st.state}${st.attributes.unit_of_measurement || ""}`;
     };
-    if (u.humidity && hass.states[u.humidity]) {
-      out.push(chip("mdi:water-percent", fmt(u.humidity), u.humidity));
-    }
-    if (u.temperature && hass.states[u.temperature]) {
-      out.push(chip("mdi:thermometer", fmt(u.temperature), u.temperature));
-    }
+    if (u.humidity && hass.states[u.humidity]) out.push(chip("mdi:water-percent", fmt(u.humidity), u.humidity));
+    if (u.temperature && hass.states[u.temperature]) out.push(chip("mdi:thermometer", fmt(u.temperature), u.temperature));
     if (u.drying && hass.states[u.drying]) {
       const v = parseFloat(hass.states[u.drying].state);
       if (!isNaN(v) && v > 0) out.push(chip("mdi:hair-dryer", `${hass.states[u.drying].state}m`, u.drying));
@@ -294,140 +337,110 @@ class BetterAmsCard extends HTMLElement {
     return out.join("");
   }
 
+  /** Custom user chip from a config entry: {entity, icon?, name?, tap_action?}. */
+  _customChip(c) {
+    if (!c || !c.entity) return "";
+    const st = this._hass.states[c.entity];
+    if (!st) return chip(c.icon || "mdi:help-circle", "—", c.entity);
+    const icon = c.icon || st.attributes.icon || "mdi:eye";
+    const unit = st.attributes.unit_of_measurement || "";
+    let val = `${this._hass.formatEntityState ? this._hass.formatEntityState(st) : (st.state + unit)}`;
+    const text = c.name ? `${c.name} ${val}` : val;
+    return chip(icon, text, c.entity);
+  }
+
+  _imageUrl(meta) {
+    const cfg = this._config;
+    const override = cfg.images && (cfg.images[meta.label] || cfg.images[normaliseModel(meta.label)]);
+    if (override) return override;
+    return IMAGE_BASE + meta.image;
+  }
+
   _renderError(msg) {
     this._sig = "__error__" + msg;
-    this.shadowRoot.innerHTML = `
-      <style>${this._styles()}</style>
-      <ha-card><div class="error">⚠️ ${escapeHtml(msg)}</div></ha-card>
-    `;
+    this.shadowRoot.innerHTML =
+      `<style>${this._styles()}</style><ha-card><div class="error">⚠️ ${escapeHtml(msg)}</div></ha-card>`;
   }
 
   _wireEvents() {
     this.shadowRoot.querySelectorAll("[data-entity]").forEach((el) => {
       el.addEventListener("click", () => {
-        const entityId = el.getAttribute("data-entity");
-        if (entityId) this._moreInfo(entityId);
+        const id = el.getAttribute("data-entity");
+        if (id) this.dispatchEvent(new CustomEvent("hass-more-info",
+          { detail: { entityId: id }, bubbles: true, composed: true }));
       });
     });
-  }
-
-  _moreInfo(entityId) {
-    this.dispatchEvent(new CustomEvent("hass-more-info", {
-      detail: { entityId },
-      bubbles: true,
-      composed: true,
-    }));
   }
 
   _styles() {
     return `
       :host { display: block; }
       ha-card { padding: 12px 14px; }
-      .card-title {
-        font-weight: 600; font-size: 1.05em; color: var(--primary-text-color);
-        margin: 0 0 8px 2px;
-      }
-      .units.stack { display: flex; flex-direction: column; gap: 14px; }
-      .units.row { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 14px; }
+      .card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 10px 2px; }
+      .card-title { font-weight:600; font-size:1.05em; color:var(--primary-text-color); }
+      .units.stack { display:flex; flex-direction:column; gap:16px; }
+      .units.row { display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:16px; }
+
       .unit {
         --bac-empty: var(--divider-color, #444);
-        border-radius: 12px;
-        padding: 8px 10px 10px;
-        background: var(--bac-unit-bg, rgba(127,127,127,0.06));
-        border: 1px solid var(--divider-color, rgba(127,127,127,0.2));
-        transition: border-color .2s, box-shadow .2s;
+        border-radius:12px; padding:8px 10px 10px;
+        background:var(--bac-unit-bg, rgba(127,127,127,0.06));
+        border:1px solid var(--divider-color, rgba(127,127,127,0.2));
+        transition:border-color .2s, box-shadow .2s;
       }
-      .unit.active {
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 1px var(--primary-color) inset;
-      }
-      .unit-head {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 8px; margin-bottom: 8px; min-height: 24px;
-      }
-      .unit-name {
-        font-weight: 600; color: var(--primary-text-color);
-        display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
-      }
-      .dot {
-        width: 8px; height: 8px; border-radius: 50%;
-        background: var(--primary-color); box-shadow: 0 0 6px var(--primary-color);
-      }
-      .chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-      .chip {
-        display: inline-flex; align-items: center; gap: 3px;
-        background: var(--bac-chip-bg, rgba(127,127,127,0.18));
-        color: var(--primary-text-color);
-        border-radius: 999px; padding: 3px 9px 3px 7px; font-size: 0.8em; cursor: pointer;
-        white-space: nowrap;
-      }
-      .chip ha-icon { --mdc-icon-size: 16px; color: var(--secondary-text-color); }
+      .unit.active { border-color:var(--primary-color); box-shadow:0 0 0 1px var(--primary-color) inset; }
+      .unit-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; min-height:24px; }
+      .unit-name { font-weight:600; color:var(--primary-text-color); display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+      .dot { width:8px; height:8px; border-radius:50%; background:var(--primary-color); box-shadow:0 0 6px var(--primary-color); }
+      .chips { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+      .chip { display:inline-flex; align-items:center; gap:3px; background:var(--bac-chip-bg, rgba(127,127,127,0.18));
+              color:var(--primary-text-color); border-radius:999px; padding:3px 9px 3px 7px; font-size:0.8em; cursor:pointer; white-space:nowrap; }
+      .chip ha-icon { --mdc-icon-size:16px; color:var(--secondary-text-color); }
 
-      .slots { display: grid; gap: 8px; }
-      .slots-1 { grid-template-columns: minmax(70px, 120px); justify-content: center; }
-      .slots-4 { grid-template-columns: repeat(4, 1fr); }
-      .slots-2 { grid-template-columns: repeat(2, 1fr); }
-      .slots-3 { grid-template-columns: repeat(3, 1fr); }
+      /* image mode */
+      .graphic { position:relative; height:var(--gfx-h,240px); aspect-ratio:var(--ar); margin:0 auto; isolation:isolate; }
+      .graphic .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
+      .films { position:absolute; inset:0; }
+      .film { position:absolute; border-radius:4px; cursor:pointer; }
+      .film.empty { background:#9a9a9a; mix-blend-mode:saturation; border-radius:4px; }
+      .film.empty::after { content:""; position:absolute; inset:0; background:rgba(0,0,0,0.28); border-radius:4px; }
+      .film.active { outline:2px solid var(--primary-color); outline-offset:1px; box-shadow:0 0 10px var(--primary-color); border-radius:5px; }
 
-      .slot {
-        display: flex; flex-direction: column; align-items: stretch; gap: 5px;
-        cursor: pointer; border-radius: 10px; padding: 4px; transition: background .15s;
-      }
-      .slot:hover { background: rgba(127,127,127,0.10); }
-      .spool {
-        height: var(--slot-h, 150px);
-        border-radius: 9px 9px 7px 7px;
-        background:
-          linear-gradient(180deg, rgba(255,255,255,0.20), rgba(0,0,0,0.10) 40%, rgba(0,0,0,0.25)),
-          var(--c);
-        border: 1px solid rgba(0,0,0,0.35);
-        box-shadow: inset 0 2px 6px rgba(255,255,255,0.18), inset 0 -8px 14px rgba(0,0,0,0.30);
-        display: flex; align-items: center; justify-content: center;
-        position: relative;
-      }
-      .spool ha-icon {
-        --mdc-icon-size: 26px; color: rgba(255,255,255,0.92);
-        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6));
-      }
-      .slot.empty .spool {
-        background: repeating-linear-gradient(45deg,
-          rgba(127,127,127,0.10), rgba(127,127,127,0.10) 6px,
-          rgba(127,127,127,0.04) 6px, rgba(127,127,127,0.04) 12px);
-        border-style: dashed; box-shadow: none;
-      }
-      .slot.empty .spool ha-icon { color: var(--secondary-text-color); opacity: 0.6; }
-      .slot.active .spool {
-        outline: 2px solid var(--primary-color);
-        outline-offset: 1px;
-        box-shadow: inset 0 2px 6px rgba(255,255,255,0.18), 0 0 10px var(--primary-color);
-      }
-      .remain {
-        height: 4px; border-radius: 3px; overflow: hidden;
-        background: rgba(127,127,127,0.25);
-      }
-      .remain span {
-        display: block; height: 100%;
-        background: var(--primary-color); border-radius: 3px;
-      }
-      .label {
-        text-align: center; font-size: 0.78em; color: var(--secondary-text-color);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      }
-      .slot.active .label { color: var(--primary-text-color); font-weight: 600; }
-      .error { padding: 12px; color: var(--error-color, #db4437); font-size: 0.9em; }
+      /* css fallback spools */
+      .slots { display:grid; gap:8px; }
+      .slots-1 { grid-template-columns:minmax(70px,120px); justify-content:center; }
+      .slots-2 { grid-template-columns:repeat(2,1fr); }
+      .slots-3 { grid-template-columns:repeat(3,1fr); }
+      .slots-4 { grid-template-columns:repeat(4,1fr); }
+      .slot { cursor:pointer; border-radius:10px; padding:4px; }
+      .slot .spool { height:var(--slot-h,200px); border-radius:9px 9px 7px 7px;
+        background:linear-gradient(180deg, rgba(255,255,255,0.20), rgba(0,0,0,0.10) 40%, rgba(0,0,0,0.25)), var(--c);
+        border:1px solid rgba(0,0,0,0.35); box-shadow:inset 0 2px 6px rgba(255,255,255,0.18), inset 0 -8px 14px rgba(0,0,0,0.30);
+        display:flex; align-items:center; justify-content:center; }
+      .slot .spool ha-icon { --mdc-icon-size:26px; color:rgba(255,255,255,0.92); filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
+      .slot.empty .spool { background:repeating-linear-gradient(45deg, rgba(127,127,127,0.10), rgba(127,127,127,0.10) 6px, rgba(127,127,127,0.04) 6px, rgba(127,127,127,0.04) 12px); border-style:dashed; box-shadow:none; }
+      .slot.active .spool { outline:2px solid var(--primary-color); outline-offset:1px; }
+
+      /* labels row */
+      .labels { display:grid; gap:6px; margin-top:8px; }
+      .labels-1 { grid-template-columns:1fr; max-width:140px; margin-left:auto; margin-right:auto; }
+      .labels-2 { grid-template-columns:repeat(2,1fr); }
+      .labels-3 { grid-template-columns:repeat(3,1fr); }
+      .labels-4 { grid-template-columns:repeat(4,1fr); }
+      .lcell { text-align:center; }
+      .lname { font-size:0.78em; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .lcell.active .lname { color:var(--primary-text-color); font-weight:600; }
+      .remain { height:4px; border-radius:3px; overflow:hidden; background:rgba(127,127,127,0.25); margin-top:3px; }
+      .remain span { display:block; height:100%; background:var(--primary-color); border-radius:3px; }
+      .error { padding:12px; color:var(--error-color,#db4437); font-size:0.9em; }
     `;
   }
 
   getCardSize() {
-    const units = (this._sig && this._resolveSafe()) || [];
-    return Math.max(2, units.length * 3);
+    const n = this._resolveSafe().length || 1;
+    return Math.max(3, n * 4);
   }
-
-  _resolveSafe() {
-    try { return this._resolveUnits(); } catch (e) { return []; }
-  }
-
-  static getConfigElement() { return document.createElement("better-ams-card-editor"); }
+  _resolveSafe() { try { return this._resolveUnits(); } catch (e) { return []; } }
 }
 
 function chip(icon, text, entityId) {
@@ -435,8 +448,17 @@ function chip(icon, text, entityId) {
   return `<div class="chip" data-entity="${entityId}"><ha-icon icon="${icon}"></ha-icon><span>${escapeHtml(text)}</span></div>`;
 }
 
-function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, Number(n) || 0)); }
+/** Normalise Bambu colour attribute (#RRGGBB, #RRGGBBAA, or bare hex) to CSS. */
+function normaliseColor(c) {
+  if (!c) return null;
+  let s = String(c).trim();
+  if (!s.startsWith("#")) s = "#" + s;
+  // #RRGGBBAA -> drop alpha for a solid swatch (alpha can be 00 on some firmwares)
+  if (/^#[0-9a-fA-F]{8}$/.test(s)) s = s.slice(0, 7);
+  return /^#[0-9a-fA-F]{6}$/.test(s) ? s : null;
+}
 
+function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, Number(n) || 0)); }
 function escapeHtml(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -450,7 +472,7 @@ if (!customElements.get("better-ams-card")) {
     type: "better-ams-card",
     name: "Better AMS Card",
     preview: false,
-    description: "Robust, theme-aware card for Bambu Lab AMS units (all models, multi-AMS, auto-follow).",
+    description: "Robust, theme-aware card for Bambu Lab AMS units — real artwork, live spool re-colouring, multi-AMS, auto-follow, custom chips.",
     documentationURL: "https://github.com/petergCA/better-ams-card",
   });
   // eslint-disable-next-line no-console
