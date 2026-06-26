@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -100,6 +100,8 @@ class BetterAmsCard extends HTMLElement {
     this._config = {
       view: "single",        // single (one unit + selector) | all
       auto_follow: true,
+      highlight_unit: false, // draw the accent border around the active unit card
+      dim_inactive: true,    // dim non-active / empty spools so the in-use one pops
       show_chips: true,
       show_labels: true,     // filament type label on each bay
       label_position: "overlay", // overlay (on the graphic) | below
@@ -296,7 +298,7 @@ class BetterAmsCard extends HTMLElement {
     const overlayLabels = imageMode && cfg.show_labels && cfg.label_position !== "below";
     const body = imageMode ? this._graphicHtml(u, overlayLabels) : this._cssSpoolsHtml(u);
     const belowLabels = cfg.show_labels && !overlayLabels ? this._labelsHtml(u) : "";
-    const activeCls = cfg.auto_follow && u.active ? "active" : "";
+    const activeCls = cfg.highlight_unit && u.active ? "active" : "";
     return `
       <div class="unit ${activeCls}" style="--slot-h:${Number(cfg.height) || 240}px;--gfx-h:${Number(cfg.height) || 240}px">
         <div class="unit-head">
@@ -317,7 +319,8 @@ class BetterAmsCard extends HTMLElement {
     const ar = meta.natW / meta.natH;
     const labelY = cfg.label_y != null ? cfg.label_y : (meta.labelY != null ? meta.labelY : 84);
 
-    const films = [], labels = [];
+    const hasActive = u.slots.some((s) => s.active);
+    const films = [], veils = [], labels = [];
     meta.windows.forEach((w, i) => {
       const s = u.slots[i];
       if (!s) return;
@@ -326,12 +329,16 @@ class BetterAmsCard extends HTMLElement {
         films.push(`<div class="film empty" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
       } else {
         const c = s.color || "#888888";
-        films.push(`<div class="film ${s.active ? "active" : ""}" style="${style}--c:${c};mix-blend-mode:${cfg.blend};"
+        films.push(`<div class="film" style="${style}--c:${c};mix-blend-mode:${cfg.blend};"
                      data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"></div>`);
       }
+      // Dim everything that isn't the spool in use (and empties), but only while
+      // something is actually printing — otherwise show all loaded colours.
+      const dim = cfg.dim_inactive && !s.active && (s.empty || hasActive);
+      if (dim) veils.push(`<div class="veil" style="${style}"></div>`);
       if (overlayLabels) {
         const cx = w.x + w.w / 2;
-        labels.push(`<div class="bay ${s.active ? "active" : ""}" style="left:${cx}%;top:${labelY}%;"
+        labels.push(`<div class="bay ${s.active ? "active" : ""} ${dim ? "dim" : ""}" style="left:${cx}%;top:${labelY}%;"
                        data-entity="${s.entity_id}">${this._bayInner(s)}</div>`);
       }
     });
@@ -339,6 +346,7 @@ class BetterAmsCard extends HTMLElement {
       <div class="graphic" style="--ar:${ar};">
         <img class="bg" src="${src}" alt="${escapeHtml(meta.label)}" />
         <div class="films">${films.join("")}</div>
+        <div class="veils">${veils.join("")}</div>
         <div class="bays">${labels.join("")}</div>
       </div>`;
   }
@@ -479,15 +487,18 @@ class BetterAmsCard extends HTMLElement {
       .films { position:absolute; inset:0; }
       .film { position:absolute; border-radius:4px; cursor:pointer; background:var(--c, transparent); }
       .film.empty { background:#9a9a9a; mix-blend-mode:saturation; border-radius:4px; }
-      .film.empty::after { content:""; position:absolute; inset:0; background:rgba(0,0,0,0.28); border-radius:4px; }
-      .film.active { outline:2px solid var(--primary-color); outline-offset:1px; box-shadow:0 0 10px var(--primary-color); border-radius:5px; }
+      /* dim veil over non-active / empty spools so the in-use one pops */
+      .veils { position:absolute; inset:0; pointer-events:none; }
+      .veil { position:absolute; background:rgba(0,0,0,0.5); border-radius:4px; }
       /* bay labels overlaid on the graphic */
       .bays { position:absolute; inset:0; pointer-events:none; }
       .bay { position:absolute; transform:translate(-50%,-50%); pointer-events:auto; cursor:pointer;
              display:flex; flex-direction:column; align-items:center; line-height:1.05;
-             background:rgba(0,0,0,0.62); color:#fff; border-radius:7px; padding:3px 8px;
-             font-size:0.8em; white-space:nowrap; backdrop-filter:blur(2px); border:1px solid rgba(255,255,255,0.08); }
-      .bay.active { border-color:var(--primary-color); box-shadow:0 0 8px var(--primary-color); }
+             background:rgba(0,0,0,0.62); color:#fff; border-radius:8px; padding:3px 9px;
+             font-size:0.8em; white-space:nowrap; backdrop-filter:blur(2px);
+             border:1px solid rgba(255,255,255,0.10); transition:opacity .2s; }
+      .bay.dim { opacity:0.5; }
+      .bay.active { border:2px solid var(--primary-color); box-shadow:0 0 9px var(--primary-color); background:rgba(0,0,0,0.78); }
       .bay .btype { font-weight:700; }
       .bay .bpct { font-size:0.82em; opacity:0.85; }
 

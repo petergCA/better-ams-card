@@ -71,7 +71,9 @@ ams:
 | `title`          | string           | —         | Optional card title. |
 | `view`           | `single` \| `all`| `single`  | `single` shows one unit with a built-in **Auto / per-AMS selector**; `all` shows every unit at once. |
 | `chips`          | list             | —         | Custom entity chips shown in the card header (see below). |
-| `auto_follow`    | boolean          | `true`    | In `single`/Auto, show whichever unit is printing; also highlights the active unit/slot. |
+| `auto_follow`    | boolean          | `true`    | In `single`/Auto, show whichever unit is printing. |
+| `dim_inactive`   | boolean          | `true`    | Dim non-active / empty spools so the in-use filament stands out. |
+| `highlight_unit` | boolean          | `false`   | Draw the accent border around the active unit card. |
 | `label_position` | `overlay`\|`below`| `overlay`| Show the filament-type label on the AMS bays (overlay) or in a row beneath the graphic. |
 | `remaining`      | `percent`\|`bar`\|`none`| `percent` | How remaining filament is shown on each bay/label. |
 | `unit_layout`    | `stack` \| `row` | `stack`   | When `view: all`, stack units vertically or lay them out in a row. |
