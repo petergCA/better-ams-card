@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -32,7 +32,7 @@ let IMAGE_BASE = "https://raw.githubusercontent.com/petergCA/better-ams-card/mai
  */
 const MODELS = {
   "ams 2 pro": {
-    slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090,
+    slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090, labelY: 84,
     windows: [
       { x: 7.3, y: 7, w: 14.5, h: 37 },
       { x: 30.2, y: 7, w: 14.5, h: 37 },
@@ -41,7 +41,7 @@ const MODELS = {
     ],
   },
   "ams": {
-    slots: 4, label: "AMS", image: "official_ams.png", natW: 700, natH: 360,
+    slots: 4, label: "AMS", image: "official_ams.png", natW: 700, natH: 360, labelY: 85,
     windows: [
       { x: 14.0, y: 9, w: 15, h: 30 },
       { x: 33.3, y: 9, w: 15, h: 30 },
@@ -50,7 +50,7 @@ const MODELS = {
     ],
   },
   "ams ht": {
-    slots: 1, label: "AMS HT", image: "official_amsht.png", natW: 171, natH: 360,
+    slots: 1, label: "AMS HT", image: "official_amsht.png", natW: 171, natH: 360, labelY: 80,
     windows: [{ x: 22, y: 14, w: 56, h: 24 }],
   },
   "ams lite": { slots: 4, label: "AMS Lite" },       // CSS fallback
@@ -98,19 +98,43 @@ class BetterAmsCard extends HTMLElement {
       );
     }
     this._config = {
+      view: "single",        // single (one unit + selector) | all
       auto_follow: true,
       show_chips: true,
-      show_labels: true,
-      show_remaining: true,
+      show_labels: true,     // filament type label on each bay
+      label_position: "overlay", // overlay (on the graphic) | below
+      remaining: "percent",  // percent | bar | none
       recolor: true,
       blend: "color",        // color | multiply | hue | overlay
-      unit_layout: "stack",  // stack | row
+      unit_layout: "stack",  // stack | row (only when view: all)
       height: 240,           // graphic height (px) — width follows the image aspect
       ...config,
     };
     if (this._config.image_base) IMAGE_BASE = this._config.image_base;
+    this._selKey = "better-ams-card:" + (config.printer || (config.ams || []).join(","));
+    this._selection = this._loadSelection();
     this._sig = null;
     if (this._hass) this._render();
+  }
+
+  _loadSelection() {
+    try { return window.localStorage.getItem(this._selKey) || "auto"; }
+    catch (e) { return "auto"; }
+  }
+  _saveSelection(v) {
+    this._selection = v;
+    try { window.localStorage.setItem(this._selKey, v); } catch (e) { /* ignore */ }
+  }
+
+  /** In single view, resolve which unit to show given the current selection. */
+  _shownUnits(units) {
+    if (this._config.view === "all" || units.length <= 1) return units;
+    const sel = this._selection || "auto";
+    if (sel !== "auto") {
+      const u = units.find((x) => x.device_id === sel);
+      if (u) return [u];
+    }
+    return [units.find((x) => x.active) || units[0]];
   }
 
   set hass(hass) { this._hass = hass; this._render(); }
@@ -187,9 +211,11 @@ class BetterAmsCard extends HTMLElement {
     };
   }
 
-  _signature(units) {
+  _signature(units, shown) {
     const hass = this._hass, cfg = this._config;
-    const parts = [cfg.title || "", cfg.height, cfg.blend, cfg.recolor ? 1 : 0, cfg.unit_layout];
+    const parts = [cfg.title || "", cfg.height, cfg.blend, cfg.recolor ? 1 : 0, cfg.unit_layout,
+      cfg.view, cfg.remaining, cfg.label_position, this._selection,
+      "shown:" + shown.map((u) => u.device_id).join(",")];
     for (const c of (cfg.chips || [])) {
       const st = hass.states[c.entity];
       parts.push("chip", c.entity, st ? st.state : "");
@@ -213,18 +239,19 @@ class BetterAmsCard extends HTMLElement {
     try { units = this._resolveUnits(); }
     catch (e) { this._renderError(String(e)); return; }
 
-    const sig = this._signature(units);
-    if (sig === this._sig) return;
-    this._sig = sig;
-
     if (!units.length) {
       this._renderError("No AMS units found. Check the 'printer' device id, or pass an explicit 'ams' list.");
       return;
     }
 
+    const shown = this._shownUnits(units);
+    const sig = this._signature(units, shown);
+    if (sig === this._sig) return;
+    this._sig = sig;
+
     const cfg = this._config;
-    const header = this._headerHtml();
-    const unitsHtml = units.map((u) => this._unitHtml(u)).join("");
+    const header = this._headerHtml(units);
+    const unitsHtml = shown.map((u) => this._unitHtml(u)).join("");
 
     this.shadowRoot.innerHTML = `
       <style>${this._styles()}</style>
@@ -236,23 +263,39 @@ class BetterAmsCard extends HTMLElement {
     this._wireEvents();
   }
 
-  _headerHtml() {
+  _headerHtml(units) {
     const cfg = this._config;
     const customChips = (cfg.chips || []).map((c) => this._customChip(c)).join("");
-    if (!cfg.title && !customChips) return "";
+    const selector = this._selectorHtml(units);
+    if (!cfg.title && !customChips && !selector) return "";
     return `
       <div class="card-head">
-        <div class="card-title">${cfg.title ? escapeHtml(cfg.title) : ""}</div>
+        <div class="head-left">
+          ${cfg.title ? `<div class="card-title">${escapeHtml(cfg.title)}</div>` : ""}
+          ${selector}
+        </div>
         <div class="chips">${customChips}</div>
       </div>`;
+  }
+
+  /** Built-in Auto / per-unit selector (single view, >1 unit). Persisted. */
+  _selectorHtml(units) {
+    if (this._config.view === "all" || units.length <= 1) return "";
+    const sel = this._selection || "auto";
+    const opts = [`<option value="auto" ${sel === "auto" ? "selected" : ""}>Auto</option>`]
+      .concat(units.map((u) =>
+        `<option value="${u.device_id}" ${sel === u.device_id ? "selected" : ""}>${escapeHtml(u.name)}</option>`));
+    return `<div class="selector"><ha-icon icon="mdi:swap-horizontal"></ha-icon>
+      <select class="sel">${opts.join("")}</select></div>`;
   }
 
   _unitHtml(u) {
     const cfg = this._config;
     const chips = cfg.show_chips ? this._unitChips(u) : "";
     const imageMode = u.meta.image && u.meta.windows && cfg.recolor !== "off";
-    const body = imageMode ? this._graphicHtml(u) : this._cssSpoolsHtml(u);
-    const labels = cfg.show_labels ? this._labelsHtml(u) : "";
+    const overlayLabels = imageMode && cfg.show_labels && cfg.label_position !== "below";
+    const body = imageMode ? this._graphicHtml(u, overlayLabels) : this._cssSpoolsHtml(u);
+    const belowLabels = cfg.show_labels && !overlayLabels ? this._labelsHtml(u) : "";
     const activeCls = cfg.auto_follow && u.active ? "active" : "";
     return `
       <div class="unit ${activeCls}" style="--slot-h:${Number(cfg.height) || 240}px;--gfx-h:${Number(cfg.height) || 240}px">
@@ -262,32 +305,51 @@ class BetterAmsCard extends HTMLElement {
           <div class="chips">${chips}</div>
         </div>
         ${body}
-        ${labels}
+        ${belowLabels}
       </div>`;
   }
 
-  /** Image mode: real artwork + per-slot re-colour overlays. */
-  _graphicHtml(u) {
+  /** Image mode: real artwork + per-slot re-colour overlays (+ optional bay labels). */
+  _graphicHtml(u, overlayLabels) {
     const cfg = this._config;
     const meta = u.meta;
     const src = this._imageUrl(meta);
     const ar = meta.natW / meta.natH;
-    const films = meta.windows.map((w, i) => {
+    const labelY = cfg.label_y != null ? cfg.label_y : (meta.labelY != null ? meta.labelY : 84);
+
+    const films = [], labels = [];
+    meta.windows.forEach((w, i) => {
       const s = u.slots[i];
-      if (!s) return "";
+      if (!s) return;
       const style = `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%;`;
       if (s.empty) {
-        return `<div class="film empty" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`;
+        films.push(`<div class="film empty" style="${style}" data-entity="${s.entity_id}" title="Empty"></div>`);
+      } else {
+        const c = s.color || "#888888";
+        films.push(`<div class="film ${s.active ? "active" : ""}" style="${style}--c:${c};mix-blend-mode:${cfg.blend};"
+                     data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"></div>`);
       }
-      const c = s.color || "#888888";
-      return `<div class="film ${s.active ? "active" : ""}" style="${style}--c:${c};mix-blend-mode:${cfg.blend};"
-                   data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"></div>`;
-    }).join("");
+      if (overlayLabels) {
+        const cx = w.x + w.w / 2;
+        labels.push(`<div class="bay ${s.active ? "active" : ""}" style="left:${cx}%;top:${labelY}%;"
+                       data-entity="${s.entity_id}">${this._bayInner(s)}</div>`);
+      }
+    });
     return `
       <div class="graphic" style="--ar:${ar};">
         <img class="bg" src="${src}" alt="${escapeHtml(meta.label)}" />
-        <div class="films">${films}</div>
+        <div class="films">${films.join("")}</div>
+        <div class="bays">${labels.join("")}</div>
       </div>`;
+  }
+
+  /** Inner content of a bay label: type + optional remaining percentage. */
+  _bayInner(s) {
+    const cfg = this._config;
+    const type = s.empty ? "Empty" : (s.type || "");
+    const pct = (cfg.remaining === "percent" && !s.empty && s.remain != null)
+      ? `<span class="bpct">${clamp(s.remain, 0, 100)}%</span>` : "";
+    return `<span class="btype">${escapeHtml(type)}</span>${pct}`;
   }
 
   /** CSS fallback for models without image calibration. */
@@ -309,11 +371,14 @@ class BetterAmsCard extends HTMLElement {
   _labelsHtml(u) {
     const cfg = this._config;
     const cells = u.slots.map((s) => {
-      const t = s.empty ? "Empty" : (s.type || "");
-      const remain = cfg.show_remaining && s.remain != null
+      let t = s.empty ? "Empty" : (s.type || "");
+      if (cfg.remaining === "percent" && !s.empty && s.remain != null) {
+        t += ` <span class="lpct">${clamp(s.remain, 0, 100)}%</span>`;
+      }
+      const bar = cfg.remaining === "bar" && !s.empty && s.remain != null
         ? `<div class="remain"><span style="width:${clamp(s.remain, 0, 100)}%"></span></div>` : "";
       return `<div class="lcell ${s.active ? "active" : ""}">
-                <div class="lname">${escapeHtml(t)}</div>${remain}</div>`;
+                <div class="lname">${t}</div>${bar}</div>`;
     }).join("");
     return `<div class="labels labels-${u.slots.length}">${cells}</div>`;
   }
@@ -367,14 +432,28 @@ class BetterAmsCard extends HTMLElement {
           { detail: { entityId: id }, bubbles: true, composed: true }));
       });
     });
+    const sel = this.shadowRoot.querySelector("select.sel");
+    if (sel) sel.addEventListener("change", (e) => {
+      this._saveSelection(e.target.value);
+      this._sig = null;
+      this._render();
+    });
   }
 
   _styles() {
     return `
       :host { display: block; }
       ha-card { padding: 12px 14px; }
-      .card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 10px 2px; }
+      .card-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 10px 2px; flex-wrap:wrap; }
+      .head-left { display:flex; align-items:center; gap:10px; }
       .card-title { font-weight:600; font-size:1.05em; color:var(--primary-text-color); }
+      .selector { display:inline-flex; align-items:center; gap:4px; background:var(--bac-chip-bg, rgba(127,127,127,0.18));
+                  border-radius:999px; padding:2px 6px 2px 9px; }
+      .selector ha-icon { --mdc-icon-size:16px; color:var(--secondary-text-color); }
+      .selector select { appearance:none; -webkit-appearance:none; background:transparent; border:none; outline:none;
+                  color:var(--primary-text-color); font-size:0.85em; font-weight:600; font-family:inherit;
+                  padding:2px 4px; cursor:pointer; }
+      .selector select option { color:#000; }
       .units.stack { display:flex; flex-direction:column; gap:16px; }
       .units.row { display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:16px; }
 
@@ -402,6 +481,15 @@ class BetterAmsCard extends HTMLElement {
       .film.empty { background:#9a9a9a; mix-blend-mode:saturation; border-radius:4px; }
       .film.empty::after { content:""; position:absolute; inset:0; background:rgba(0,0,0,0.28); border-radius:4px; }
       .film.active { outline:2px solid var(--primary-color); outline-offset:1px; box-shadow:0 0 10px var(--primary-color); border-radius:5px; }
+      /* bay labels overlaid on the graphic */
+      .bays { position:absolute; inset:0; pointer-events:none; }
+      .bay { position:absolute; transform:translate(-50%,-50%); pointer-events:auto; cursor:pointer;
+             display:flex; flex-direction:column; align-items:center; line-height:1.05;
+             background:rgba(0,0,0,0.62); color:#fff; border-radius:7px; padding:3px 8px;
+             font-size:0.8em; white-space:nowrap; backdrop-filter:blur(2px); border:1px solid rgba(255,255,255,0.08); }
+      .bay.active { border-color:var(--primary-color); box-shadow:0 0 8px var(--primary-color); }
+      .bay .btype { font-weight:700; }
+      .bay .bpct { font-size:0.82em; opacity:0.85; }
 
       /* css fallback spools */
       .slots { display:grid; gap:8px; }
@@ -426,6 +514,7 @@ class BetterAmsCard extends HTMLElement {
       .labels-4 { grid-template-columns:repeat(4,1fr); }
       .lcell { text-align:center; }
       .lname { font-size:0.78em; color:var(--secondary-text-color); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .lname .lpct { opacity:0.8; }
       .lcell.active .lname { color:var(--primary-text-color); font-weight:600; }
       .remain { height:4px; border-radius:3px; overflow:hidden; background:rgba(127,127,127,0.25); margin-top:3px; }
       .remain span { display:block; height:100%; background:var(--primary-color); border-radius:3px; }

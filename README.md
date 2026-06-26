@@ -69,18 +69,28 @@ ams:
 | `printer`        | string           | —         | Printer **device id**. Auto-discovers AMS sub-devices and enables auto-follow. Either this or `ams` is required. |
 | `ams`            | list of strings  | —         | Explicit AMS **device ids** to render (overrides discovery). |
 | `title`          | string           | —         | Optional card title. |
+| `view`           | `single` \| `all`| `single`  | `single` shows one unit with a built-in **Auto / per-AMS selector**; `all` shows every unit at once. |
 | `chips`          | list             | —         | Custom entity chips shown in the card header (see below). |
-| `auto_follow`    | boolean          | `true`    | Highlight the unit/slot currently being printed from. |
-| `unit_layout`    | `stack` \| `row` | `stack`   | Stack units vertically or lay them out in a row. |
+| `auto_follow`    | boolean          | `true`    | In `single`/Auto, show whichever unit is printing; also highlights the active unit/slot. |
+| `label_position` | `overlay`\|`below`| `overlay`| Show the filament-type label on the AMS bays (overlay) or in a row beneath the graphic. |
+| `remaining`      | `percent`\|`bar`\|`none`| `percent` | How remaining filament is shown on each bay/label. |
+| `unit_layout`    | `stack` \| `row` | `stack`   | When `view: all`, stack units vertically or lay them out in a row. |
 | `height`         | number (px)      | `240`     | Height of each unit's graphic. Width follows the image aspect, so every unit lines up — and the tall HT no longer dominates. |
 | `recolor`        | boolean          | `true`    | Re-colour each spool's filament in the artwork to the actual loaded colour. Set `false` to keep the stock artwork colours. |
 | `blend`          | string           | `color`   | Blend mode for re-colouring: `color` (recommended), `multiply`, `hue`, `overlay`. |
 | `images`         | map              | —         | Override the artwork per model, e.g. `{ "AMS 2 Pro": "/local/my-ams.png" }`. |
 | `image_base`     | string           | (GitHub)  | Base URL for the bundled artwork. Point at a `/local/...` path for fully offline installs. |
 | `show_chips`     | boolean          | `true`    | Show humidity / temperature / drying chips. |
-| `show_labels`    | boolean          | `true`    | Show the filament-type label + remaining bar under each slot. |
-| `show_remaining` | boolean          | `true`    | Show the remaining-filament bar. |
+| `show_labels`    | boolean          | `true`    | Show the filament-type label per slot. |
+| `label_y`        | number (%)       | (per model)| Override the vertical position of the overlay bay labels. |
 | `include_external` | boolean        | `false`   | Include the external spool when auto-discovering. |
+
+### Single view + built-in selector
+
+By default the card shows **one AMS at a time** with a small selector in the
+header: **Auto** (follows whatever is actively printing) plus an entry for each
+unit so you can pin a specific one. Your choice is remembered per browser — no
+`input_select` helper required. Set `view: all` to show every unit stacked.
 
 ### Custom chips
 
