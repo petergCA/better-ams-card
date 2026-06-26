@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -95,8 +95,9 @@ class BetterAmsCard extends HTMLElement {
     if (!config) throw new Error("better-ams-card: missing config");
     if (!config.printer && !config.ams) {
       throw new Error(
-        "better-ams-card: provide a 'printer' device id (auto-discovers AMS units) " +
-        "or an explicit 'ams' list of AMS device ids."
+        "better-ams-card: provide 'printer' (a printer device id OR any entity from " +
+        "the printer — auto-discovers its AMS units), or an explicit 'ams' list " +
+        "(device ids or entity ids)."
       );
     }
     this._config = {
@@ -157,15 +158,26 @@ class BetterAmsCard extends HTMLElement {
     return (d && (d.name_by_user || d.name)) || deviceId;
   }
 
+  /** Accept either a device id or an entity id (resolved to its device). */
+  _resolveDeviceId(ref) {
+    if (!ref || typeof ref !== "string") return null;
+    if (ref.includes(".")) {                       // looks like an entity_id
+      const e = (this._hass.entities || {})[ref];
+      return e ? e.device_id : null;
+    }
+    return ref;                                    // already a device id
+  }
+
   _resolveUnits() {
     const hass = this._hass, cfg = this._config;
     let ids = [];
     if (Array.isArray(cfg.ams) && cfg.ams.length) {
-      ids = cfg.ams.slice();
+      ids = cfg.ams.map((r) => this._resolveDeviceId(r)).filter(Boolean);
     } else if (cfg.printer && hass.devices) {
+      const printerDev = this._resolveDeviceId(cfg.printer);
       for (const id in hass.devices) {
         const d = hass.devices[id];
-        if (d.via_device_id !== cfg.printer) continue;
+        if (d.via_device_id !== printerDev) continue;
         const m = normaliseModel(d.model);
         if (m.includes("ams") || (cfg.include_external && m.includes("external"))) ids.push(id);
       }

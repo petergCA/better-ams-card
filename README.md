@@ -41,27 +41,43 @@ card for **Bambu Lab AMS** units — built to fix the things the stock
 
 ## Usage
 
-The simplest config — point it at your **printer device** and it discovers every
-AMS unit attached to it:
+Point the card at your **printer** and it **auto-discovers every AMS attached to
+it** — each AMS reports to Home Assistant as a sub-device of the printer, so you
+don't list them. `printer` accepts a **device id _or_ any entity from the
+printer** (entities are easier to find):
 
 ```yaml
+# Easiest — reference any entity that belongs to the printer:
 type: custom:better-ams-card
 title: H2C
-printer: 588de0eb4f4634b2feb57a0703a0411a   # printer device id
+printer: sensor.h2c_print_progress
 ```
 
-Or list AMS units explicitly:
+```yaml
+# Or use the printer's device id:
+type: custom:better-ams-card
+title: H2C
+printer: 588de0eb4f4634b2feb57a0703a0411a
+```
+
+Prefer to list AMS units explicitly? `ams` entries are also device ids **or**
+entity ids (any entity from each AMS):
 
 ```yaml
 type: custom:better-ams-card
 ams:
-  - f614140a3991efffe7ed083ddbd64b0b   # AMS 1 device id
-  - 110e434960ec2b68cd84c00f5420c5b2   # AMS 2 device id
-  - 1a7566d65e5a3261d91c9606170ccbd8   # AMS HT device id
+  - sensor.x1c_ams_humidity          # entity from the AMS  → resolves its device
+  - 1a7566d65e5a3261d91c9606170ccbd8 # …or the AMS device id directly
 ```
 
-> **Finding device ids:** Settings → Devices & Services → Devices → open the AMS
-> (or printer) → the id is in the URL, or use Developer Tools.
+### Finding the reference
+
+- **By entity (recommended):** Settings → Devices & Services → **Entities**, search
+  for your printer/AMS (e.g. `humidity`, `nozzle`, `progress`), and copy the
+  entity id. Any entity belonging to the printer works for `printer:`.
+- **By device id:** Settings → Devices & Services → **Devices** → open the printer
+  (or AMS) → the id is the long hex string in the page URL
+  (`/config/devices/device/<id>`).
 
 ---
 
@@ -69,8 +85,8 @@ ams:
 
 | Option           | Type             | Default   | Description |
 |------------------|------------------|-----------|-------------|
-| `printer`        | string           | —         | Printer **device id**. Auto-discovers AMS sub-devices and enables auto-follow. Either this or `ams` is required. |
-| `ams`            | list of strings  | —         | Explicit AMS **device ids** to render (overrides discovery). |
+| `printer`        | string           | —         | Printer **device id** _or_ any **entity id** from the printer. Auto-discovers the AMS sub-devices. Either this or `ams` is required. |
+| `ams`            | list of strings  | —         | Explicit AMS **device ids or entity ids** (overrides discovery). |
 | `title`          | string           | —         | Optional card title. |
 | `view`           | `single` \| `all`| `single`  | `single` shows one unit with a built-in **Auto / per-AMS selector**; `all` shows every unit at once. |
 | `chips`          | list             | —         | Custom entity chips shown in the card header (see below). |
