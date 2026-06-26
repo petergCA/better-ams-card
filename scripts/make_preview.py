@@ -74,27 +74,32 @@ for w, s in zip(WINS, SLOTS):
         x0, y0, x1, y1 = box(w); vd.rounded_rectangle([x0, y0, x1, y1], radius=6, fill=(0, 0, 0, 120))
 ams = Image.alpha_composite(ams, veil)
 
-def bay_label(img, cx, cy, type_, pct, active, dim):
-    d = ImageDraw.Draw(img); f1 = font(17, True); f2 = font(13)
-    lines = [type_ if type_ else "Empty"] + ([f"{pct}%"] if pct is not None else [])
-    w1 = d.textlength(lines[0], font=f1); w2 = d.textlength(lines[1], font=f2) if len(lines) > 1 else 0
-    bw = int(max(w1, w2)) + 22; bh = (26 if len(lines) > 1 else 18) + 12
+def bay_label(img, cx, cy, type_, pct, active, dim, accent):
+    f1 = font(26, True); f2 = font(20)
+    line1 = type_ if type_ else "Empty"
+    line2 = f"{pct}%" if pct is not None else None
+    b1 = f1.getbbox(line1); w1 = b1[2] - b1[0]; h1 = b1[3] - b1[1]
+    w2 = h2 = 0
+    if line2:
+        b2 = f2.getbbox(line2); w2 = b2[2] - b2[0]; h2 = b2[3] - b2[1]
+    pad_x, pad_y, gap = 14, 9, 4
+    bw = int(max(w1, w2)) + pad_x * 2
+    bh = int(h1 + (gap + h2 if line2 else 0)) + pad_y * 2
     x0 = int(cx - bw / 2); y0 = int(cy - bh / 2)
     alpha = 255 if active else (130 if dim else 200)
     layer = Image.new("RGBA", img.size, (0, 0, 0, 0)); ld = ImageDraw.Draw(layer)
-    ld.rounded_rectangle([x0, y0, x0 + bw, y0 + bh], radius=8,
-                         fill=(0, 0, 0, int(0.78 * alpha) if active else int(0.62 * alpha)),
-                         outline=ACCENT if active else (255, 255, 255, 40), width=2 if active else 1)
+    ld.rounded_rectangle([x0, y0, x0 + bw, y0 + bh], radius=10,
+                         fill=(0, 0, 0, int(0.80 * alpha) if active else int(0.62 * alpha)),
+                         outline=(accent if active else (255, 255, 255, 40)), width=3 if active else 1)
     img.alpha_composite(layer)
     d = ImageDraw.Draw(img); col = (255, 255, 255, alpha)
-    ty = y0 + (5 if len(lines) > 1 else 6)
-    d.text((cx - w1 / 2, ty), lines[0], font=f1, fill=col)
-    if len(lines) > 1:
-        d.text((cx - w2 / 2, ty + 18), lines[1], font=f2, fill=(255, 255, 255, int(alpha * 0.85)))
+    d.text((cx - w1 / 2 - b1[0], y0 + pad_y - b1[1]), line1, font=f1, fill=col)
+    if line2:
+        d.text((cx - w2 / 2 - b2[0], y0 + pad_y + h1 + gap - b2[1]), line2, font=f2, fill=(255, 255, 255, int(alpha * 0.85)))
 
 for bx, s in zip(BAYX, SLOTS):
     cx = int(bx / 100 * GW); cy = int(LABEL_Y * GH)
-    bay_label(ams, cx, cy, s["type"], s["pct"], s["active"], dim=not s["active"])
+    bay_label(ams, cx, cy, s["type"], s["pct"], s["active"], not s["active"], s["color"] or ACCENT)
 
 PAD = 18; UPAD = 12
 CW = GW + PAD * 2 + UPAD * 2

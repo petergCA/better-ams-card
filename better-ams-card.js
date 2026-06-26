@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.3.4";
+const VERSION = "0.3.5";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -339,7 +339,9 @@ class BetterAmsCard extends HTMLElement {
       if (dim) veils.push(`<div class="veil" style="${style}"></div>`);
       if (overlayLabels) {
         const cx = (meta.bayX && meta.bayX[i] != null) ? meta.bayX[i] : (w.x + w.w / 2);
-        labels.push(`<div class="bay ${s.active ? "active" : ""} ${dim ? "dim" : ""}" style="left:${cx}%;top:${labelY}%;"
+        const accent = (!s.empty && s.color) ? s.color : "#FF9800";
+        labels.push(`<div class="bay ${s.active ? "active" : ""} ${dim ? "dim" : ""}"
+                       style="left:${cx}%;top:${labelY}%;--bay-accent:${accent};"
                        data-entity="${s.entity_id}">${this._bayInner(s)}</div>`);
       }
     });
@@ -494,12 +496,13 @@ class BetterAmsCard extends HTMLElement {
       /* bay labels overlaid on the graphic */
       .bays { position:absolute; inset:0; pointer-events:none; }
       .bay { position:absolute; transform:translate(-50%,-50%); pointer-events:auto; cursor:pointer;
-             display:flex; flex-direction:column; align-items:center; line-height:1.05;
-             background:rgba(0,0,0,0.62); color:#fff; border-radius:8px; padding:3px 9px;
-             font-size:0.8em; white-space:nowrap; backdrop-filter:blur(2px);
+             display:flex; flex-direction:column; align-items:center; line-height:1.08;
+             background:rgba(0,0,0,0.62); color:#fff; border-radius:9px; padding:4px 11px;
+             font-size:1.2em; white-space:nowrap; backdrop-filter:blur(2px);
              border:1px solid rgba(255,255,255,0.10); transition:opacity .2s; }
       .bay.dim { opacity:0.5; }
-      .bay.active { border:2px solid var(--primary-color); box-shadow:0 0 9px var(--primary-color); background:rgba(0,0,0,0.78); }
+      .bay.active { border:2px solid var(--bay-accent, var(--primary-color));
+             box-shadow:0 0 10px var(--bay-accent, var(--primary-color)); background:rgba(0,0,0,0.80); }
       .bay .btype { font-weight:700; }
       .bay .bpct { font-size:0.82em; opacity:0.85; }
 
