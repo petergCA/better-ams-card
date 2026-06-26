@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.7.1";
+const VERSION = "0.7.2";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -35,25 +35,31 @@ const MODELS = {
     slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090,
     emptyMask: true,   // base art has a coloured spool in every bay → desaturate empties
     labelY: 78, bayX: [16.2, 38.7, 61.0, 83.7],
-    // main strand window + flank masks either side of the orange feeder connectors
+    // One window per slot, covering ONLY the visible filament strand bundle behind
+    // the clear lid (measured: strands x bands ≈ 8.3/30.8/53.1/75.8%, w≈15.7%,
+    // y 7.8%→45.4%). Stops above the "Bambu Lab AMS 2 PRO" logo (~y52%) and the
+    // amber feeder gears (~y57%) so neither gets re-coloured.
     windows: [
-      [{ x: 8.3, y: 7, w: 15.7, h: 51 }, { x: 8.3, y: 58, w: 4.9, h: 14 }, { x: 19.3, y: 58, w: 4.7, h: 14 }],
-      [{ x: 30.8, y: 7, w: 15.7, h: 51 }, { x: 30.8, y: 58, w: 5.2, h: 14 }, { x: 42.2, y: 58, w: 4.3, h: 14 }],
-      [{ x: 53.1, y: 7, w: 15.7, h: 51 }, { x: 53.1, y: 58, w: 5.2, h: 14 }, { x: 64.0, y: 58, w: 4.8, h: 14 }],
-      [{ x: 75.9, y: 7, w: 15.7, h: 51 }, { x: 75.9, y: 58, w: 4.8, h: 14 }, { x: 86.7, y: 58, w: 4.9, h: 14 }],
+      { x: 8.3,  y: 7.8, w: 15.7, h: 37.6 },
+      { x: 30.8, y: 7.8, w: 15.7, h: 37.6 },
+      { x: 53.1, y: 7.8, w: 15.7, h: 37.6 },
+      { x: 75.8, y: 7.8, w: 15.8, h: 37.6 },
     ],
   },
   "ams": {
     slots: 4, label: "AMS", image: "ams.png", natW: 1698, natH: 1094,
     emptyMask: true,   // high-res art with coloured backing → desaturate empties
     labelY: 79, bayX: [16.5, 37.6, 60.7, 83.6],
-    // Each slot: main strand window + two flank masks that recolour the filament
-    // visible either side of the feeder gear cluster (centre left untinted).
+    // One window per slot over the visible strand bundle only (strands run a touch
+    // lower here, y 8%→50.8%; stops above the logo ~y54% and the amber gears).
+    // Slot 3 is split around the central silver sensor button: a full-width upper
+    // window above the button, then a narrower lower band to its right so the
+    // button stays silver (its right edge reaches x≈913 / 53.8%).
     windows: [
-      [{ x: 9.5, y: 7, w: 16.5, h: 52 }, { x: 9.5, y: 59, w: 3.6, h: 13 }, { x: 19.8, y: 59, w: 6.2, h: 13 }],
-      [{ x: 29.7, y: 7, w: 16, h: 52 }, { x: 29.7, y: 59, w: 5.6, h: 13 }, { x: 42.2, y: 59, w: 3.5, h: 13 }],
-      [{ x: 52.8, y: 7, w: 16, h: 52 }, { x: 52.9, y: 59, w: 4.8, h: 13 }, { x: 64.5, y: 59, w: 4.3, h: 13 }],
-      [{ x: 75.6, y: 7, w: 16, h: 52 }, { x: 75.7, y: 59, w: 4.7, h: 13 }, { x: 86.9, y: 59, w: 4.7, h: 13 }],
+      { x: 8.0,  y: 8.0, w: 16.0, h: 42.8 },
+      { x: 29.7, y: 8.0, w: 15.8, h: 42.8 },
+      [{ x: 52.8, y: 8.0, w: 15.8, h: 36.7 }, { x: 53.7, y: 44.7, w: 14.8, h: 6.3 }],
+      { x: 75.4, y: 8.0, w: 16.1, h: 42.8 },
     ],
   },
   "ams ht": {

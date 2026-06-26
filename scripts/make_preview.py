@@ -44,12 +44,12 @@ def desaturate(img, box, dark=0.0):
             L = int(lum(r, g, b) * (1 - dark)); px[x, y] = (L, L, L, a)
 
 # Calibrated filament windows (must match MODELS["ams 2 pro"].windows in the card):
-# each slot = main strand window + two flank masks around the feeder connector.
+# one window per slot over the visible strand bundle only — nothing below the lid.
 WINS = [
-    [(8.3, 7, 15.7, 51), (8.3, 58, 4.9, 14), (19.3, 58, 4.7, 14)],
-    [(30.8, 7, 15.7, 51), (30.8, 58, 5.2, 14), (42.2, 58, 4.3, 14)],
-    [(53.1, 7, 15.7, 51), (53.1, 58, 5.2, 14), (64.0, 58, 4.8, 14)],
-    [(75.9, 7, 15.7, 51), (75.9, 58, 4.8, 14), (86.7, 58, 4.9, 14)],
+    [(8.3,  7.8, 15.7, 37.6)],
+    [(30.8, 7.8, 15.7, 37.6)],
+    [(53.1, 7.8, 15.7, 37.6)],
+    [(75.8, 7.8, 15.8, 37.6)],
 ]
 BAYX = [16.2, 38.7, 61.0, 83.7]  # label centres on the spool/feeder bays
 LABEL_Y = 0.78
