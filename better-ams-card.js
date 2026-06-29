@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.7.1";
+const VERSION = "0.7.2";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -431,8 +431,16 @@ class BetterAmsCard extends HTMLElement {
     if (u.humidity && hass.states[u.humidity]) out.push(chip("mdi:water-percent", fmt(u.humidity), u.humidity, "#36A2E0"));
     if (u.temperature && hass.states[u.temperature]) out.push(chip("mdi:thermometer", fmt(u.temperature), u.temperature, "#E5544B"));
     if (u.drying && hass.states[u.drying]) {
-      const v = parseFloat(hass.states[u.drying].state);
-      if (!isNaN(v) && v > 0) out.push(chip("mdi:hair-dryer", `${hass.states[u.drying].state}m`, u.drying));
+      const st = hass.states[u.drying];
+      const v = parseFloat(st.state);
+      if (!isNaN(v) && v > 0) {
+        const um = (st.attributes.unit_of_measurement || "h").toLowerCase();
+        let mins = um.startsWith("h") ? v * 60 : (um.startsWith("s") ? v / 60 : v);
+        mins = Math.round(mins);
+        const h = Math.floor(mins / 60), m = mins % 60;
+        const txt = h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
+        out.push(chip("mdi:hair-dryer", txt, u.drying));
+      }
     }
     return out.join("");
   }
