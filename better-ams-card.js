@@ -44,7 +44,7 @@ const MODELS = {
       { l: 49.8, r: 28.3 },
       { l: 71.7, r: 0 },
     ],
-    bayX: [16.6, 38.7, 60.9, 82.5], labelY: 22, emptyTint: "#3f3f3f",
+    bayX: [16.6, 38.7, 60.9, 82.5], labelY: 78, emptyTint: "#3f3f3f",
   },
   "ams": {
     slots: 4, label: "AMS", image: "ams.png", natW: 1698, natH: 1094,
