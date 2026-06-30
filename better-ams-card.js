@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.7.2";
+const VERSION = "0.8.0";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -32,16 +32,19 @@ let IMAGE_BASE = "https://raw.githubusercontent.com/petergCA/better-ams-card/mai
  */
 const MODELS = {
   "ams 2 pro": {
-    slots: 4, label: "AMS 2 Pro", image: "ams2pro.png", natW: 1790, natH: 1090,
-    emptyMask: true,   // base art has a coloured spool in every bay → desaturate empties
-    labelY: 78, bayX: [16.2, 38.7, 61.0, 83.7],
-    // main strand window + flank masks either side of the orange feeder connectors
-    windows: [
-      [{ x: 8.3, y: 7, w: 15.7, h: 51 }, { x: 8.3, y: 58, w: 4.9, h: 14 }, { x: 19.3, y: 58, w: 4.7, h: 14 }],
-      [{ x: 30.8, y: 7, w: 15.7, h: 51 }, { x: 30.8, y: 58, w: 5.2, h: 14 }, { x: 42.2, y: 58, w: 4.3, h: 14 }],
-      [{ x: 53.1, y: 7, w: 15.7, h: 51 }, { x: 53.1, y: 58, w: 5.2, h: 14 }, { x: 64.0, y: 58, w: 4.8, h: 14 }],
-      [{ x: 75.9, y: 7, w: 15.7, h: 51 }, { x: 75.9, y: 58, w: 4.8, h: 14 }, { x: 86.7, y: 58, w: 4.9, h: 14 }],
+    // v2 LAYERED render: a pre-composited base (dome/smoke/housing/shading with
+    // coils in neutral grayscale) + a coil mask. Each bay's filament colour is
+    // multiplied onto its coil region only — correct for every colour incl. white.
+    slots: 4, label: "AMS 2 Pro",
+    base: "ams2pro_base.png", coil: "ams2pro_coil.png", natW: 1902, natH: 1163,
+    // per-bay horizontal clip for the multiply overlay: inset(0 r% 0 l%)
+    bays: [
+      { l: 0,    r: 72.4 },
+      { l: 27.6, r: 50.2 },
+      { l: 49.8, r: 28.3 },
+      { l: 71.7, r: 0 },
     ],
+    bayX: [16.6, 38.7, 60.9, 82.5], labelY: 22, emptyTint: "#3f3f3f",
   },
   "ams": {
     slots: 4, label: "AMS", image: "ams.png", natW: 1698, natH: 1094,
@@ -315,9 +318,12 @@ class BetterAmsCard extends HTMLElement {
   _unitHtml(u) {
     const cfg = this._config;
     const chips = cfg.show_chips ? this._unitChips(u) : "";
-    const imageMode = u.meta.image && u.meta.windows && cfg.recolor !== "off";
-    const overlayLabels = imageMode && cfg.show_labels && cfg.label_position !== "below";
-    const body = imageMode ? this._graphicHtml(u, overlayLabels) : this._cssSpoolsHtml(u);
+    const layeredMode = !!(u.meta.base && u.meta.coil);
+    const imageMode = !layeredMode && u.meta.image && u.meta.windows && cfg.recolor !== "off";
+    const overlayLabels = (layeredMode || imageMode) && cfg.show_labels && cfg.label_position !== "below";
+    const body = layeredMode ? this._layeredHtml(u, overlayLabels)
+               : imageMode ? this._graphicHtml(u, overlayLabels)
+               : this._cssSpoolsHtml(u);
     const belowLabels = cfg.show_labels && !overlayLabels ? this._labelsHtml(u) : "";
     const activeCls = cfg.highlight_unit && u.active ? "active" : "";
     return `
@@ -329,6 +335,52 @@ class BetterAmsCard extends HTMLElement {
         </div>
         ${body}
         ${belowLabels}
+      </div>`;
+  }
+
+  /**
+   * Layered mode: a pre-composited base render (dome/smoke/housing/shading, coils
+   * in neutral grayscale) with each bay's filament colour multiplied onto its coil
+   * region via a shared coil mask + per-bay horizontal clip. multiply over a neutral
+   * base is correct for every colour, white included.
+   */
+  _layeredHtml(u, overlayLabels) {
+    const cfg = this._config;
+    const meta = u.meta;
+    const baseSrc = this._imageUrl(meta, "base");
+    const coilSrc = this._imageUrl(meta, "coil");
+    const ar = meta.natW / meta.natH;
+    const labelY = cfg.label_y != null ? cfg.label_y : (meta.labelY != null ? meta.labelY : 22);
+    const hasActive = u.slots.some((s) => s.active);
+    const emptyTint = meta.emptyTint || "#3f3f3f";
+    const recolor = cfg.recolor !== "off";
+    const films = [], labels = [];
+    meta.bays.forEach((bay, i) => {
+      const s = u.slots[i];
+      if (!s) return;
+      const mask = `-webkit-mask-image:url('${coilSrc}');mask-image:url('${coilSrc}');clip-path:inset(0 ${bay.r}% 0 ${bay.l}%);`;
+      if (recolor) {
+        const c = s.empty ? emptyTint : (s.color || "#888888");
+        films.push(`<div class="cfilm" data-entity="${s.entity_id}" title="${escapeHtml(s.name)}"
+                     style="--c:${c};${mask}"></div>`);
+        if (!s.empty && cfg.dim_inactive && !s.active && hasActive) {
+          films.push(`<div class="cveil" style="${mask}"></div>`);
+        }
+      }
+      if (overlayLabels) {
+        const cx = (meta.bayX && meta.bayX[i] != null) ? meta.bayX[i] : 50;
+        const accent = (!s.empty && s.color) ? s.color : "#FF9800";
+        const dimL = s.empty || (!s.active && hasActive);
+        labels.push(`<div class="bay ${s.active ? "active" : ""} ${dimL ? "dim" : ""}"
+                       style="left:${cx}%;top:${labelY}%;--bay-accent:${accent};"
+                       data-entity="${s.entity_id}">${this._bayInner(s)}</div>`);
+      }
+    });
+    return `
+      <div class="graphic" style="--ar:${ar};">
+        <img class="bg" src="${baseSrc}" alt="${escapeHtml(meta.label)}" />
+        <div class="films">${films.join("")}</div>
+        <div class="bays">${labels.join("")}</div>
       </div>`;
   }
 
@@ -477,11 +529,13 @@ class BetterAmsCard extends HTMLElement {
     return chip(icon, text, c.entity, color, c.tap_action);
   }
 
-  _imageUrl(meta) {
+  _imageUrl(meta, key = "image") {
     const cfg = this._config;
-    const override = cfg.images && (cfg.images[meta.label] || cfg.images[normaliseModel(meta.label)]);
-    if (override) return override;
-    return IMAGE_BASE + meta.image;
+    if (key === "image") {
+      const override = cfg.images && (cfg.images[meta.label] || cfg.images[normaliseModel(meta.label)]);
+      if (override) return override;
+    }
+    return IMAGE_BASE + meta[key];
   }
 
   _renderError(msg) {
@@ -548,6 +602,11 @@ class BetterAmsCard extends HTMLElement {
       .graphic { position:relative; height:var(--gfx-h,240px); aspect-ratio:var(--ar); margin:0 auto; isolation:isolate; }
       .graphic .bg { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; }
       .films { position:absolute; inset:0; }
+      /* layered mode: full-box colour multiplied onto a bay's coil via mask + clip */
+      .cfilm { position:absolute; inset:0; background:var(--c); mix-blend-mode:multiply; cursor:pointer;
+               -webkit-mask-size:100% 100%; mask-size:100% 100%; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; }
+      .cveil { position:absolute; inset:0; background:rgba(0,0,0,0.5); pointer-events:none;
+               -webkit-mask-size:100% 100%; mask-size:100% 100%; -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat; }
       .film { position:absolute; border-radius:4px; cursor:pointer; background:var(--c, transparent); }
       .film.empty { background:#9a9a9a; mix-blend-mode:saturation; border-radius:4px; }
       /* feather all four edges so the recolour blends into low-contrast artwork */
