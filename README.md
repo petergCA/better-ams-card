@@ -139,11 +139,24 @@ chips:
     name: Bento
     map: { on: "On", off: "Off" }
     tap_action: toggle     # default is more-info
+
+  # only show while actually printing
+  - entity: sensor.x1c_print_weight
+    icon: mdi:weight-gram
+    name: Weight
+    round: true
+    unit: true
+    hide_when:
+      entity: sensor.x1c_print_status      # optional; defaults to this chip's entity
+      states: [unavailable, offline, idle]  # hide the chip in any of these states
 ```
 
 Per-chip options: `entity` (required), `icon`, `name`, `map` (state→text),
 `colors` (state→icon colour), `color` (static), `round`, `unit`
-(`true` or a literal like `"%"`), `tap_action` (`more-info` | `toggle`).
+(`true` or a literal like `"%"`), `tap_action` (`more-info` | `toggle`),
+`hide_when` (`{ entity?, states: [...] }` — hide the chip when the gate
+entity's state, case-insensitive, is one of `states`; `entity` defaults to
+the chip's own).
 
 ### Live spool re-colouring
 

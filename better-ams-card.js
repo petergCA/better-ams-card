@@ -16,7 +16,7 @@
  * https://github.com/petergCA/better-ams-card
  */
 
-const VERSION = "0.8.0";
+const VERSION = "0.8.1";
 
 // Default location for the bundled artwork. Raw GitHub resolves on any install
 // with internet (HACS does not serve a plugin's extra files). Override with
@@ -244,6 +244,10 @@ class BetterAmsCard extends HTMLElement {
     for (const c of (cfg.chips || [])) {
       const st = hass.states[c.entity];
       parts.push("chip", c.entity, st ? st.state : "");
+      if (c.hide_when && c.hide_when.entity) {
+        const gs = hass.states[c.hide_when.entity];
+        parts.push("gate", c.hide_when.entity, gs ? gs.state : "");
+      }
     }
     for (const u of units) {
       parts.push(u.device_id, u.name, u.model);
@@ -500,15 +504,25 @@ class BetterAmsCard extends HTMLElement {
   /** Custom user chip from a config entry: {entity, icon?, name?, tap_action?}. */
   /**
    * Custom chip config:
-   *   { entity, icon?, name?, map?, colors?, color?, round?, unit?, tap_action? }
+   *   { entity, icon?, name?, map?, colors?, color?, round?, unit?, tap_action?, hide_when? }
    *   map:     { <state>: "text" }    state -> display text
    *   colors:  { <state>: "#rgb" }    state -> icon colour
    *   round:   true                   round a numeric state
    *   unit:    true | "%"             append unit (auto or literal)
    *   tap_action: "more-info" (default) | "toggle"
+   *   hide_when: { entity?, states: [ ... ] }
+   *            hide the chip entirely when the gate entity's state (or the
+   *            chip's own, if `entity` omitted) is one of `states`
+   *            (case-insensitive). A missing gate entity counts as
+   *            "unavailable".
    */
   _customChip(c) {
     if (!c || !c.entity) return "";
+    if (c.hide_when && Array.isArray(c.hide_when.states)) {
+      const gate = this._hass.states[c.hide_when.entity || c.entity];
+      const cur = (gate ? gate.state : "unavailable").toLowerCase();
+      if (c.hide_when.states.some((s) => String(s).toLowerCase() === cur)) return "";
+    }
     const st = this._hass.states[c.entity];
     const icon = c.icon || (st && st.attributes.icon) || "mdi:eye";
     if (!st) return chip(icon, c.name ? `${c.name} —` : "—", c.entity, c.color, c.tap_action);
